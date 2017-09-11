@@ -9,16 +9,18 @@
 #include "game.h"
 #include "str.h"
 
+static const bool kDumpObjectScript = false;
+
 void Game::allocateTables() {
-	_tempDecodeBuffer = (uint8 *)malloc(65535);
+	_tempDecodeBuffer = (uint8_t *)malloc(65535);
 	if (!_tempDecodeBuffer) {
 		error("Unable to allocate temporary decode buffer (65535 bytes)");
 	}
-	_bitmapBuffer0 = (uint8 *)malloc(kBitmapBufferDefaultSize);
+	_bitmapBuffer0 = (uint8_t *)malloc(kBitmapBufferDefaultSize);
 	if (!_bitmapBuffer0) {
 		error("Unable to allocate bitmap buffer 0 (%d bytes)", kBitmapBufferDefaultSize);
 	}
-	_bitmapBuffer2 = (uint8 *)malloc(kBitmapBufferDefaultSize);
+	_bitmapBuffer2 = (uint8_t *)malloc(kBitmapBufferDefaultSize);
 	if (!_bitmapBuffer2) {
 		error("Unable to allocate bitmap buffer 2 (%d bytes)", kBitmapBufferDefaultSize);
 	}
@@ -49,7 +51,7 @@ void Game::loadCommonSprites() {
 	loadWGP("..\\bermuda.wgp");
 	_bagBackgroundImage = _bitmapBuffer1;
 	int bagBitmapSize = _bagBackgroundImage.pitch * (_bagBackgroundImage.h + 1);
-	_bagBackgroundImage.bits = (uint8 *)malloc(bagBitmapSize);
+	_bagBackgroundImage.bits = (uint8_t *)malloc(bagBitmapSize);
 	if (!_bagBackgroundImage.bits) {
 		error("Unable to allocate bag bitmap buffer (%d bytes)", bagBitmapSize);
 	}
@@ -57,7 +59,7 @@ void Game::loadCommonSprites() {
 
 	loadFile("..\\bermuda.spr", _tempDecodeBuffer);
 	int decodedSize = READ_LE_UINT32(_tempDecodeBuffer + 2);
-	_bermudaSprData = (uint8 *)malloc(decodedSize);
+	_bermudaSprData = (uint8_t *)malloc(decodedSize);
 	if (!_bermudaSprData) {
 		error("Unable to allocate bermuda.spr buffer (%d bytes)", decodedSize);
 	}
@@ -125,12 +127,12 @@ void Game::unloadCommonSprites() {
 	}
 }
 
-uint8 *Game::loadFile(const char *fileName, uint8 *dst, uint32 *dstSize) {
+uint8_t *Game::loadFile(const char *fileName, uint8_t *dst, uint32_t *dstSize) {
 	debug(DBG_RES, "Game::loadFile('%s')", fileName);
 	FileHolder fp(_fs, fileName);
-	uint32 fileSize = fp->size();
+	uint32_t fileSize = fp->size();
 	if (!dst) {
-		dst = (uint8 *)malloc(fileSize);
+		dst = (uint8_t *)malloc(fileSize);
 		if (!dst) {
 			error("Unable to allocate buffer for file loading (%d bytes)", fileSize);
 		}
@@ -154,7 +156,8 @@ void Game::loadWGP(const char *fileName) {
 		fp->read(_bitmapBuffer0, len);
 	} else if (tag == 0x5057) {
 		len = 0;
-		while (true) {
+		int dataSize = fp->size();
+		do {
 			const int sz = fp->readUint16LE();
 			if (fp->ioErr()) {
 				break;
@@ -162,8 +165,10 @@ void Game::loadWGP(const char *fileName) {
 				fp->read(_bitmapBuffer2, sz);
 				const int decodedSize = decodeLzss(_bitmapBuffer2, _bitmapBuffer0 + len);
 				len += decodedSize;
+				dataSize -= sz;
 			}
-		}
+			dataSize -= 2;
+		} while (dataSize > 0);
 		offs += 4;
 		len += 4;
 	} else {
@@ -203,7 +208,7 @@ void Game::loadSPR(const char *fileName, SceneAnimation *sa) {
 		for (int i = 0; i < num; ++i) {
 			int len = fp->readUint16LE();
 			SceneObjectFrame *frame = &_sceneObjectFramesTable[_sceneObjectFramesCount];
-			frame->data = (uint8 *)malloc(len);
+			frame->data = (uint8_t *)malloc(len);
 			if (!frame->data) {
 				error("Unable to allocate %d bytes", len);
 			}
@@ -221,18 +226,16 @@ void Game::loadSPR(const char *fileName, SceneAnimation *sa) {
 }
 
 static void dumpObjectScript(SceneAnimation *sa, const char *fileName) {
-#if 1
 	const char *name = strrchr(fileName, '\\');
 	if (name) {
 		char filePath[512];
-		sprintf(filePath, "dumps/%s.script", name + 1);
+		snprintf(filePath, sizeof(filePath), "dumps/%s.script", name + 1);
 		File f;
 		if (f.open(filePath, "wb")) {
 			f.write(sa->scriptData, sa->scriptSize);
 			f.close();
 		}
 	}
-#endif
 }
 
 void Game::loadMOV(const char *fileName) {
@@ -374,9 +377,11 @@ void Game::loadMOV(const char *fileName) {
 		case 4:
 			sa->scriptSize = fp->readUint16LE();
 			if (sa->scriptSize != 0) {
-				sa->scriptData = (uint8 *)malloc(sa->scriptSize);
+				sa->scriptData = (uint8_t *)malloc(sa->scriptSize);
 				fp->read(sa->scriptData, sa->scriptSize);
-				dumpObjectScript(sa, fileName);
+				if (kDumpObjectScript) {
+					dumpObjectScript(sa, fileName);
+				}
 			}
 			break;
 		case 5:

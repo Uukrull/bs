@@ -13,10 +13,10 @@ static const Rect _dialogueBackgroundRect = { 33, 165, 574, 150 };
 static const int _selectedDialogueChoiceColor = 0xCAF6FF;
 static const int _unselectedDialogueChoiceColor = 0x6DC6FA;
 
-static void drawChar(uint8 *dst, int dstPitch, const uint16 *fontData, int c, uint8 color) {
+static void drawChar(uint8_t *dst, int dstPitch, const uint16_t *fontData, int c, uint8_t color) {
 	int offset = c * 16;
 	for (int i = 0; i < 16; ++i) {
-		uint16 chr = fontData[offset + i];
+		uint16_t chr = fontData[offset + i];
 		for (int b = 0; b < 16; ++b) {
 			if (chr & (1 << b)) {
 				dst[-i * dstPitch + b] = color;
@@ -25,8 +25,8 @@ static void drawChar(uint8 *dst, int dstPitch, const uint16 *fontData, int c, ui
 	}
 }
 
-static uint8 findBestMatchingColor(const uint8 *src, int color) {
-	uint8 bestColor = 0;
+static uint8_t findBestMatchingColor(const uint8_t *src, int color) {
+	uint8_t bestColor = 0;
 	int bestSum = -1;
 	int r =  color        & 0xFF;
 	int g = (color >>  8) & 0xFF;
@@ -54,7 +54,7 @@ void Game::redrawDialogueTexts() {
 		int stringLen = 0;
 		int substringCount = 0;
 		for (char *p = _dialogueChoiceText[i]; *p; ++p) {
-			int chr = (uint8)*p;
+			int chr = (uint8_t)*p;
 			stringLen += _fontCharWidth[chr] + 1;
 			if (stringLen > _dialogueTextRect.w) {
 				assert(substringCount < 8);
@@ -69,7 +69,7 @@ void Game::redrawDialogueTexts() {
 		}
 	}
 
-	uint8 *textBuffer = (uint8 *)malloc(_dialogueTextRect.w * _dialogueTextRect.h);
+	uint8_t *textBuffer = (uint8_t *)malloc(_dialogueTextRect.w * _dialogueTextRect.h);
 	if (!textBuffer) {
 		return;
 	}
@@ -78,7 +78,7 @@ void Game::redrawDialogueTexts() {
 	int y = 0;
 	for (int i = 0; i < _dialogueChoiceCounter; ++i) {
 		int color = (_dialogueSpeechIndex == i) ? _selectedDialogueChoiceColor : _unselectedDialogueChoiceColor;
-		uint8 choiceColor = findBestMatchingColor(_bitmapBuffer0 + kOffsetBitmapPalette, color);
+		uint8_t choiceColor = findBestMatchingColor(_bitmapBuffer0 + kOffsetBitmapPalette, color);
 		int x = 0;
 		int substring = 0;
 		for (char *p = _dialogueChoiceText[i]; *p; ++p) {
@@ -87,7 +87,7 @@ void Game::redrawDialogueTexts() {
 				y += 16;
 				x = 0;
 			} else {
-				int chr = (uint8)*p;
+				int chr = (uint8_t)*p;
 				if (y + 16 >= _dialogueTextRect.h) {
 					break;
 				}
@@ -101,8 +101,7 @@ void Game::redrawDialogueTexts() {
 	free(textBuffer);
 }
 
-void Game::handleDialogue() {
-	debug(DBG_DIALOGUE, "Game::handleDialogue()");
+void Game::initDialogue() {
 	playMusic("..\\midi\\sadialog.mid");
 	for (int spr = 0; spr < 3; ++spr) {
 		for (int i = 0; i < 105; ++i) {
@@ -119,8 +118,11 @@ void Game::handleDialogue() {
 	_stub->_pi.dirMask = 0;
 	_stub->_pi.escape = false;
 	_stub->_pi.enter = false;
+}
 
-	while (!_stub->_quit) {
+void Game::handleDialogue() {
+	debug(DBG_DIALOGUE, "Game::handleDialogue()");
+
 		if (_stub->_pi.dirMask & PlayerInput::DIR_DOWN) {
 			_stub->_pi.dirMask &= ~PlayerInput::DIR_DOWN;
 			if (_dialogueChoiceSelected == 0 && _dialogueSpeechIndex < _dialogueChoiceCounter - 1) {
@@ -135,7 +137,8 @@ void Game::handleDialogue() {
 		}
 		if (_stub->_pi.escape) {
 			_stub->_pi.escape = false;
-			break;
+			_nextState = kStateGame;
+			return;
 		}
 		if (_stub->_pi.enter) {
 			_stub->_pi.enter = false;
@@ -152,7 +155,8 @@ void Game::handleDialogue() {
 			if (_dialogueChoiceGotoFlag[_dialogueSpeechIndex]) {
 				setupDialog(_dialogueChoiceNextId[_dialogueSpeechIndex]);
 				if (_dialogueChoiceCounter == 0) {
-					break;
+					_nextState = kStateGame;
+					return;
 				}
 			} else {
 				int n = atoi(_tempTextBuffer);
@@ -161,7 +165,7 @@ void Game::handleDialogue() {
 				} else {
 					_dialogueEndedFlag = 1;
 					_lastDialogueEndedId = atoi(_tempTextBuffer);
-					break;
+					return;
 				}
 			}
 		}
@@ -171,18 +175,14 @@ void Game::handleDialogue() {
 		if (_dialogueSpriteIndex == 2) {
 			if (_dialogueSpriteCurrentFrameTable[2] == 0) {
 				_dialogueEndedFlag = 1;
-				break;
+				return;
 			}
 		} else {
 			redrawDialogueTexts();
 		}
+}
 
-		_stub->updateScreen();
-		_stub->processEvents();
-
-		_stub->sleep(50);
-	}
-
+void Game::finiDialogue() {
 	unloadDialogueData();
 	if (_dialogueFrameSpriteData) {
 		free(_dialogueFrameSpriteData);
@@ -258,7 +258,7 @@ void Game::loadDialogueSprite(int spr) {
 	assert(count <= 105);
 	for (int i = 0; i < count; ++i) {
 		int size = fp->readUint16LE();
-		_dialogueSpriteDataTable[spr][i] = (uint8 *)malloc(size + 10);
+		_dialogueSpriteDataTable[spr][i] = (uint8_t *)malloc(size + 10);
 		if (_dialogueSpriteDataTable[spr][i]) {
 			fp->read(_dialogueSpriteDataTable[spr][i], size + 10);
 		}
@@ -290,21 +290,11 @@ void Game::loadDialogueData(const char *filename) {
 void Game::redrawDialogueSprite(int num) {
 	debug(DBG_DIALOGUE, "Game::redrawDialogueSprite(%d)", num);
 	decodeLzss(_dialogueFrameSpriteData + 2, _tempDecodeBuffer);
-	uint8 *spriteBitmap = _tempDecodeBuffer + 25000;
+	uint8_t *spriteBitmap = _tempDecodeBuffer + 25000;
 	decodeLzss(_dialogueSpriteDataTable[num][_dialogueSpriteCurrentFrameTable[num]], spriteBitmap);
 	int sprY = getBitmapHeight(_tempDecodeBuffer) - getBitmapHeight(spriteBitmap);
 	int sprX = getBitmapWidth(_tempDecodeBuffer) - getBitmapWidth(spriteBitmap);
 	int frameX = 0;
-/*	if (num == 0) {
-		frameX = _dialogueBackgroundRect.x + 23;
-		_dialogueTextRect.x = frameX + getBitmapWidth(_tempDecodeBuffer) + 20;
-	} else {
-		frameX = (_dialogueBackgroundRect.w - getBitmapWidth(_tempDecodeBuffer)) / 2 - 23;
-		frameX *= (num - 1);
-		frameX = _dialogueBackgroundRect.w - 23 - getBitmapWidth(_tempDecodeBuffer) - frameX;
-		frameX += _dialogueBackgroundRect.x;
-		_dialogueTextRect.x = _dialogueBackgroundRect.x + 20;
-	}*/
 	switch (num) {
 	case 0:
 		frameX = _dialogueBackgroundRect.x + 13;
@@ -338,14 +328,14 @@ void Game::redrawDialogueSprite(int num) {
 void Game::redrawDialogueBackground() {
 	debug(DBG_DIALOGUE, "Game::redrawDialogueBackground()");
 	sortObjects();
-	int _di = -1;
+	int previousObject = -1;
 	for (int i = 0; i < _sceneObjectsCount; ++i) {
 		SceneObject *so = _sortedSceneObjectsTable[i];
 		if (so->statePrev == 1 || so->statePrev == 2) {
-			if (_di >= 0) {
-				redrawObjectBoxes(_di, i);
+			if (previousObject >= 0) {
+				redrawObjectBoxes(previousObject, i);
 			}
-			_di = i;
+			previousObject = i;
 			decodeLzss(_sceneObjectFramesTable[so->frameNumPrev].data, _tempDecodeBuffer);
 			SceneObjectFrame *sof = &_sceneObjectFramesTable[so->frameNumPrev];
 			if (so->flipPrev == 2) {
@@ -357,11 +347,11 @@ void Game::redrawDialogueBackground() {
 			}
 		}
 	}
-	if (_di >= 0) {
-		redrawObjectBoxes(_di, _di);
+	if (previousObject >= 0) {
+		redrawObjectBoxes(previousObject, previousObject);
 	}
 
-	const uint8 *src = _bitmapBuffer1.bits + _dialogueBackgroundRect.y * _bitmapBuffer1.pitch + _dialogueBackgroundRect.x;
+	const uint8_t *src = _bitmapBuffer1.bits + _dialogueBackgroundRect.y * _bitmapBuffer1.pitch + _dialogueBackgroundRect.x;
 	_stub->copyRect(_dialogueBackgroundRect.x, _dialogueBackgroundRect.y, _dialogueBackgroundRect.w, _dialogueBackgroundRect.h, src, _bitmapBuffer1.pitch);
 	_stub->darkenRect(_dialogueBackgroundRect.x, _dialogueBackgroundRect.y, _dialogueBackgroundRect.w, _dialogueBackgroundRect.h);
 

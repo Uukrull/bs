@@ -13,13 +13,13 @@ enum SaveLoadMode {
 
 static File *_saveOrLoadStream;
 static SaveLoadMode _saveOrLoadMode;
-static const char *_saveFileNameFormat = "%s/bermuda.%03d";
+static const char *kSaveFileNameFormat = "%s/bermuda.%03d";
 
-static void saveByte(uint8 b) {
+static void saveByte(uint8_t b) {
 	_saveOrLoadStream->writeByte(b);
 }
 
-static uint8 loadByte() {
+static uint8_t loadByte() {
 	return _saveOrLoadStream->readByte();
 }
 
@@ -47,7 +47,7 @@ static void loadStr(void *s, int len) {
 	_saveOrLoadStream->read(s, len);
 }
 
-static void saveOrLoadByte(uint8 &b) {
+static void saveOrLoadByte(uint8_t &b) {
 	switch (_saveOrLoadMode) {
 	case kSaveMode:
 		saveByte(b);
@@ -58,7 +58,7 @@ static void saveOrLoadByte(uint8 &b) {
 	}
 }
 
-static void saveOrLoadInt16(int16 &i) {
+static void saveOrLoadInt16(int16_t &i) {
 	switch (_saveOrLoadMode) {
 	case kSaveMode:
 		saveInt16(i);
@@ -69,7 +69,7 @@ static void saveOrLoadInt16(int16 &i) {
 	}
 }
 
-static void saveOrLoadStr(char *s, int16 len = -1) {
+static void saveOrLoadStr(char *s, int16_t len = -1) {
 	bool countTermChar = (len == -2); // deal with original buggy file format...
 	bool storeLen = (len < 0);
 	if (storeLen) {
@@ -164,13 +164,13 @@ static void save_bagObjects(BagObject *bo, int count) {
 }
 
 static void load_bagObjects(BagObject *bo, int &count) {
-	uint16 totalSize = loadInt16();
-	uint8 *bagData = (uint8 *)malloc(totalSize);
+	uint16_t totalSize = loadInt16();
+	uint8_t *bagData = (uint8_t *)malloc(totalSize);
 	if (bagData) {
 		loadStr(bagData, totalSize);
 		count = loadInt16();
 		assert(count <= Game::NUM_BAG_OBJECTS);
-		uint16 bagObjectsOffset[Game::NUM_BAG_OBJECTS + 1];
+		uint16_t bagObjectsOffset[Game::NUM_BAG_OBJECTS + 1];
 		for (int i = 0; i < count; ++i) {
 			bagObjectsOffset[i] = loadInt16();
 			loadStr(bo[i].name, 20);
@@ -178,7 +178,7 @@ static void load_bagObjects(BagObject *bo, int &count) {
 		for (int i = 0; i < count; ++i) {
 			int dataSize = (i == count - 1) ? totalSize : bagObjectsOffset[i + 1];
 			dataSize -= bagObjectsOffset[i];
-			bo[i].data = (uint8 *)malloc(dataSize);
+			bo[i].data = (uint8_t *)malloc(dataSize);
 			if (bo[i].data) {
 				memcpy(bo[i].data, bagData + bagObjectsOffset[i], dataSize);
 				bo[i].dataSize = dataSize;
@@ -191,7 +191,7 @@ static void load_bagObjects(BagObject *bo, int &count) {
 void Game::saveState(int slot) {
 	File f;
 	char filePath[512];
-	sprintf(filePath, _saveFileNameFormat, _savePath, slot);
+	snprintf(filePath, sizeof(filePath), kSaveFileNameFormat, _savePath, slot);
 	if (!f.open(filePath, "wb")) {
 		warning("Unable to save game state to file '%s'", filePath);
 		return;
@@ -241,7 +241,7 @@ void Game::saveState(int slot) {
 void Game::loadState(int slot, bool switchScene) {
 	File f;
 	char filePath[512];
-	sprintf(filePath, _saveFileNameFormat, _savePath, slot);
+	snprintf(filePath, sizeof(filePath), kSaveFileNameFormat, _savePath, slot);
 	if (!f.open(filePath, "rb")) {
 		warning("Unable to load game state to file '%s'", filePath);
 		return;

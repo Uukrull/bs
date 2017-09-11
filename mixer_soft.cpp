@@ -24,15 +24,22 @@ struct LockAudioStack {
 	SystemStub *_stub;
 };
 
-static void mixSample(int16 &dst, int sample, int volume) {
+static void mixSample(int16_t &dst, int sample, int volume) {
 	int pcm = dst + ((sample * volume) >> 8);
 	if (pcm < -32768) {
 		pcm = -32768;
 	} else if (pcm > 32767) {
 		pcm = 32767;
 	}
-	dst = (int16)pcm;
+	dst = (int16_t)pcm;
 }
+
+struct MixerChannel {
+	virtual ~MixerChannel() {}
+	virtual bool load(File *f, int mixerSampleRate) = 0;
+	virtual int read(int16_t *dst, int samples) = 0;
+	int id;
+};
 
 struct MixerChannel_Wav : MixerChannel {
 	MixerChannel_Wav()
@@ -70,7 +77,7 @@ struct MixerChannel_Wav : MixerChannel {
 			f->read(buf, 4);
 			if (memcmp(buf, "data", 4) == 0) {
 				_bufSize = f->readUint32LE();
-				_buf = (uint8 *)malloc(_bufSize);
+				_buf = (uint8_t *)malloc(_bufSize);
 				if (_buf) {
 					f->read(_buf, _bufSize);
 					return true;
@@ -80,7 +87,7 @@ struct MixerChannel_Wav : MixerChannel {
 		return false;
 	}
 
-	bool readSample(int16 &sample) {
+	bool readSample(int16_t &sample) {
 		switch (_bitsPerSample) {
 		case 8:
 			if ((_bufReadOffset >> _fracStepBits) >= _bufSize) { // end of buffer
@@ -99,9 +106,9 @@ struct MixerChannel_Wav : MixerChannel {
 		return true;
 	}
 
-	virtual int read(int16 *dst, int samples) {
+	virtual int read(int16_t *dst, int samples) {
 		for (int i = 0; i < samples; ++i) {
-			int16 sampleL = 0, sampleR;
+			int16_t sampleL = 0, sampleR;
 			if (!readSample(sampleL)) {
 				return i;
 			}
@@ -115,7 +122,7 @@ struct MixerChannel_Wav : MixerChannel {
 		return samples;
 	}
 
-	uint8 *_buf;
+	uint8_t *_buf;
 	int _bufSize;
 	int _bufReadOffset;
 	int _bufReadStep;
@@ -180,8 +187,8 @@ struct MixerChannel_Vorbis : MixerChannel {
 		return true;
 	}
 
-	virtual int read(int16 *dst, int samples) {
-		int dstSize = samples * sizeof(int16) * 2;
+	virtual int read(int16_t *dst, int samples) {
+		int dstSize = samples * sizeof(int16_t) * 2;
 		if (dstSize > _readBufSize) {
 			_readBufSize = dstSize;
 			free(_readBuf);
@@ -205,11 +212,11 @@ struct MixerChannel_Vorbis : MixerChannel {
 				break;
 			}
 			// mix pcm data
-			for (unsigned int i = 0; i < len / sizeof(int16); ++i) {
-				const int16 sample = (int16)READ_LE_UINT16(&_readBuf[i * 2]);
+			for (unsigned int i = 0; i < len / sizeof(int16_t); ++i) {
+				const int16_t sample = (int16_t)READ_LE_UINT16(&_readBuf[i * 2]);
 				mixSample(dst[readSize + i], sample, _musicVolume);
 			}
-			readSize += len / sizeof(int16);
+			readSize += len / sizeof(int16_t);
 			dstSize -= len;
 		}
 		return readSize;
@@ -223,139 +230,159 @@ struct MixerChannel_Vorbis : MixerChannel {
 };
 #endif
 
-Mixer::Mixer(SystemStub *stub)
-	: _stub(stub), _channelIdSeed(0), _open(false) {
-	memset(_channels, 0, sizeof(_channels));
-}
+struct MixerSoftware: Mixer {
+	static const int kMaxChannels = 4;
 
-Mixer::~Mixer() {
-	close();
-	for (int i = 0; i < kMaxChannels; ++i) {
-		if (_channels[i]) {
-			delete _channels[i];
+	SystemStub *_stub;
+	int _channelIdSeed;
+	bool _open;
+	MixerChannel *_channels[kMaxChannels];
+
+	MixerSoftware(SystemStub *stub)
+		: _stub(stub), _channelIdSeed(0), _open(false) {
+		memset(_channels, 0, sizeof(_channels));
+	}
+
+	virtual ~MixerSoftware() {
+		for (int i = 0; i < kMaxChannels; ++i) {
+			if (_channels[i]) {
+				delete _channels[i];
+			}
 		}
 	}
-}
 
-void Mixer::open() {
-	if (!_open) {
-		_stub->startAudio(Mixer::mixCallback, this);
-		_open = true;
+	virtual void open() {
+		if (!_open) {
+			_stub->startAudio(MixerSoftware::mixCallback, this);
+			_open = true;
+		}
 	}
-}
 
-void Mixer::close() {
-	if (_open) {
-		_stub->stopAudio();
-		_open = false;
+	virtual void close() {
+		if (_open) {
+			_stub->stopAudio();
+			_open = false;
+		}
 	}
-}
 
-void Mixer::startSound(File *f, int *id, MixerChannel *mc) {
-	if (mc->load(f, _stub->getOutputSampleRate()) && bindChannel(mc, id)) {
-		return;
-	}
-	*id = kDefaultSoundId;
-	delete mc;
-}
-
-void Mixer::playSoundWav(File *f, int *id) {
-	debug(DBG_MIXER, "Mixer::playSoundWav()");
-	LockAudioStack las(_stub);
-	startSound(f, id, new MixerChannel_Wav);
-}
-
-void Mixer::playSoundVorbis(File *f, int *id) {
-	debug(DBG_MIXER, "Mixer::playSoundVorbis()");
-#ifdef BERMUDA_VORBIS
-	LockAudioStack las(_stub);
-	startSound(f, id, new MixerChannel_Vorbis);
-#endif
-}
-
-bool Mixer::isSoundPlaying(int id) {
-	debug(DBG_MIXER, "Mixer::isSoundPlaying() 0x%X", id);
-	if (id == kDefaultSoundId) {
-		return false;
-	}
-	LockAudioStack las(_stub);
-	int channel = getChannelFromSoundId(id);
-	assert(channel >= 0 && channel < kMaxChannels);
-	MixerChannel *mc = _channels[channel];
-	return (mc && mc->id == id);
-}
-
-void Mixer::stopSound(int id) {
-	debug(DBG_MIXER, "Mixer::stopSound() 0x%X", id);
-	if (id == kDefaultSoundId) {
-		return;
-	}
-	LockAudioStack las(_stub);
-	int channel = getChannelFromSoundId(id);
-	assert(channel >= 0 && channel < kMaxChannels);
-	MixerChannel *mc = _channels[channel];
-	if (mc && mc->id == id) {
+	void startSound(File *f, int *id, MixerChannel *mc) {
+		if (mc->load(f, _stub->getOutputSampleRate()) && bindChannel(mc, id)) {
+			return;
+		}
+		*id = kDefaultSoundId;
 		delete mc;
-		_channels[channel] = 0;
 	}
-}
 
-void Mixer::stopAll() {
-	debug(DBG_MIXER, "Mixer::stopAll()");
-	LockAudioStack las(_stub);
-	for (int i = 0; i < kMaxChannels; ++i) {
-		if (_channels[i]) {
-			delete _channels[i];
-			_channels[i] = 0;
+	virtual void playSound(File *f, int *id) {
+		debug(DBG_MIXER, "Mixer::playSound()");
+		LockAudioStack las(_stub);
+		startSound(f, id, new MixerChannel_Wav);
+	}
+
+	virtual void playMusic(File *f, int *id) {
+		debug(DBG_MIXER, "Mixer::playMusic()");
+#ifdef BERMUDA_VORBIS
+		LockAudioStack las(_stub);
+		startSound(f, id, new MixerChannel_Vorbis);
+#endif
+	}
+
+	virtual bool isSoundPlaying(int id) {
+		debug(DBG_MIXER, "Mixer::isSoundPlaying() 0x%X", id);
+		if (id == kDefaultSoundId) {
+			return false;
+		}
+		LockAudioStack las(_stub);
+		const int channel = getChannelFromSoundId(id);
+		assert(channel >= 0 && channel < kMaxChannels);
+		MixerChannel *mc = _channels[channel];
+		return (mc && mc->id == id);
+	}
+
+	virtual void stopSound(int id) {
+		debug(DBG_MIXER, "Mixer::stopSound() 0x%X", id);
+		if (id == kDefaultSoundId) {
+			return;
+		}
+		LockAudioStack las(_stub);
+		const int channel = getChannelFromSoundId(id);
+		assert(channel >= 0 && channel < kMaxChannels);
+		MixerChannel *mc = _channels[channel];
+		if (mc && mc->id == id) {
+			delete mc;
+			_channels[channel] = 0;
 		}
 	}
-}
 
-void Mixer::mix(int16 *buf, int len) {
-	assert((len & 1) == 0);
-	memset(buf, 0, len * sizeof(int16));
-	for (int i = 0; i < kMaxChannels; ++i) {
-		MixerChannel *mc = _channels[i];
-		if (mc) {
-			if (mc->read(buf, len / 2) <= 0) {
-				delete mc;
+	virtual void stopAll() {
+		debug(DBG_MIXER, "Mixer::stopAll()");
+		LockAudioStack las(_stub);
+		for (int i = 0; i < kMaxChannels; ++i) {
+			if (_channels[i]) {
+				delete _channels[i];
 				_channels[i] = 0;
 			}
 		}
 	}
-}
 
-void Mixer::mixCallback(void *param, uint8 *buf, int len) {
-	assert((len & 1) == 0);
-	((Mixer *)param)->mix((int16 *)buf, len / 2);
-}
-
-int Mixer::generateSoundId(int channel) {
-	++_channelIdSeed;
-	_channelIdSeed &= 0xFFFF;
-	assert(channel >= 0 && channel < 16);
-	return (_channelIdSeed << 4) | channel;
-}
-
-int Mixer::getChannelFromSoundId(int id) {
-	return id & 15;
-}
-
-bool Mixer::bindChannel(MixerChannel *mc, int *id) {
-	for (int i = 0; i < kMaxChannels; ++i) {
-		if (!_channels[i]) {
-			_channels[i] = mc;
-			*id = mc->id = generateSoundId(i);
-			return true;
+	virtual void setMusicMix(void *param, void (*mix)(void *, uint8_t *, int)) {
+		if (mix) {
+			_stub->startAudio(mix, param);
+		} else {
+			_stub->startAudio(mixCallback, this);
 		}
 	}
-	return false;
-}
 
-void Mixer::unbindChannel(int channel) {
-	assert(channel >= 0 && channel < kMaxChannels);
-	if (_channels[channel]) {
-		delete _channels[channel];
-		_channels[channel] = 0;
+	void mix(int16_t *buf, int len) {
+		assert((len & 1) == 0);
+		memset(buf, 0, len * sizeof(int16_t));
+		for (int i = 0; i < kMaxChannels; ++i) {
+			MixerChannel *mc = _channels[i];
+			if (mc) {
+				if (mc->read(buf, len / 2) <= 0) {
+					delete mc;
+					_channels[i] = 0;
+				}
+			}
+		}
 	}
+
+	static void mixCallback(void *param, uint8_t *buf, int len) {
+		assert((len & 1) == 0);
+		((MixerSoftware *)param)->mix((int16_t *)buf, len / 2);
+	}
+
+	int generateSoundId(int channel) {
+		++_channelIdSeed;
+		_channelIdSeed &= 0xFFFF;
+		assert(channel >= 0 && channel < 16);
+		return (_channelIdSeed << 4) | channel;
+	}
+
+	int getChannelFromSoundId(int id) {
+		return id & 15;
+	}
+
+	bool bindChannel(MixerChannel *mc, int *id) {
+		for (int i = 0; i < kMaxChannels; ++i) {
+			if (!_channels[i]) {
+				_channels[i] = mc;
+				*id = mc->id = generateSoundId(i);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	void unbindChannel(int channel) {
+		assert(channel >= 0 && channel < kMaxChannels);
+		if (_channels[channel]) {
+			delete _channels[channel];
+			_channels[channel] = 0;
+		}
+	}
+};
+
+Mixer *Mixer_Software_create(SystemStub *stub) {
+	return new MixerSoftware(stub);
 }

@@ -13,16 +13,11 @@
 #include <cerrno>
 #include <stdint.h>
 
-typedef uint8_t uint8;
-typedef int8_t int8;
-typedef uint16_t uint16;
-typedef int16_t int16;
-typedef uint32_t uint32;
-typedef int32_t int32;
-
 #include "util.h"
 
+#ifndef ARRAYSIZE
 #define ARRAYSIZE(a) (sizeof(a)/sizeof(a[0]))
+#endif
 
 struct Point {
 	int x, y;
@@ -33,25 +28,34 @@ struct Rect {
 	int w, h;
 };
 
-inline uint16 READ_LE_UINT16(const void *ptr) {
-	const uint8 *b = (const uint8 *)ptr;
+inline uint16_t READ_LE_UINT16(const void *ptr) {
+	const uint8_t *b = (const uint8_t *)ptr;
 	return (b[1] << 8) | b[0];
 }
 
-inline uint32 READ_LE_UINT32(const void *ptr) {
-	const uint8 *b = (const uint8 *)ptr;
+inline uint32_t READ_LE_UINT32(const void *ptr) {
+	const uint8_t *b = (const uint8_t *)ptr;
 	return (b[3] << 24) | (b[2] << 16) | (b[1] << 8) | b[0];
 }
 
+inline uint32_t READ_BE_UINT32(const void *ptr) {
+	const uint8_t *b = (const uint8_t *)ptr;
+	return (b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3];
+}
+
+#ifndef MIN
 template<typename T>
 inline T MIN(T v1, T v2) {
 	return (v1 < v2) ? v1 : v2;
 }
+#endif
 
+#ifndef MAX
 template<typename T>
 inline T MAX(T v1, T v2) {
 	return (v1 > v2) ? v1 : v2;
 }
+#endif
 
 template<typename T>
 inline T ABS(T t) {
