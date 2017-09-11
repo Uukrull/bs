@@ -1,3 +1,7 @@
+/*
+ * Bermuda Syndrome engine rewrite
+ * Copyright (C) 2007 Gregory Montoir
+ */
 
 #include "fs.h"
 #include "file.h"
@@ -12,7 +16,6 @@ enum ParserToken {
 	kParserTokenUnknown
 };
 
-static bool _stopParsing;
 static ParserToken _currentToken;
 
 static ParserToken getNextToken(char **s) {
@@ -32,8 +35,7 @@ static ParserToken getNextToken(char **s) {
 
 void Game::parseDLG() {
 	_dialogueChoiceSize = 0;
-	_stopParsing = false;
-	for (char *s = _dialogueDescriptionBuffer; !_stopParsing && s; ) {
+	for (char *s = _dialogueDescriptionBuffer; s; ) {
 		assert(_dialogueChoiceSize < NUM_DIALOG_ENTRIES);
 		DialogueChoice *dc = &_dialogueChoiceData[_dialogueChoiceSize];
 		dc->id = stringNextToken(&s);

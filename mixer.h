@@ -6,6 +6,8 @@
 #ifndef MIXER_H__
 #define MIXER_H__
 
+#include "intern.h"
+
 struct File;
 struct SystemStub;
 
@@ -33,6 +35,7 @@ struct Mixer {
 	void playSoundVorbis(File *f, int *id);
 	bool isSoundPlaying(int id);
 	void stopSound(int id);
+	void stopAll();
 
 	void mix(int16 *buf, int len);
 	static void mixCallback(void *param, uint8 *buf, int len);

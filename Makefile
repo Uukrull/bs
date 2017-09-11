@@ -20,15 +20,21 @@ CXXFLAGS+= $(SDL_CFLAGS) $(DEFINES)
 
 OBJDIR = obj
 
-SRCS = bag.cpp decoder.cpp dialogue.cpp file.cpp fs.cpp game.cpp main.cpp mixer.cpp \
-	opcodes.cpp parser_dlg.cpp parser_scn.cpp random.cpp resource.cpp saveload.cpp \
-	staticres.cpp str.cpp systemstub_sdl.cpp util.cpp win31.cpp
+SRCS = avi_player.cpp bag.cpp decoder.cpp dialogue.cpp file.cpp fs.cpp game.cpp \
+	main.cpp mixer.cpp opcodes.cpp parser_dlg.cpp parser_scn.cpp random.cpp \
+	resource.cpp saveload.cpp staticres.cpp str.cpp systemstub_sdl.cpp util.cpp \
+	win31.cpp
 
 OBJS = $(SRCS:.cpp=.o)
 DEPS = $(SRCS:.cpp=.d)
 
+all: $(OBJDIR) bs
+
 bs: $(addprefix $(OBJDIR)/, $(OBJS))
 	$(CXX) $(LDFLAGS) -o $@ $^ $(SDL_LIBS) $(VORBIS_LIBS)
+
+$(OBJDIR):
+	mkdir $(OBJDIR)
 
 $(OBJDIR)/%.o: %.cpp
 	$(CXX) $(CXXFLAGS) -MMD -c $< -o $@

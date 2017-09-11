@@ -223,8 +223,10 @@ Mixer::~Mixer() {
 }
 
 void Mixer::open() {
-	_stub->startAudio(Mixer::mixCallback, this);
-	_open = true;
+	if (!_open) {
+		_stub->startAudio(Mixer::mixCallback, this);
+		_open = true;
+	}
 }
 
 void Mixer::close() {
@@ -280,6 +282,17 @@ void Mixer::stopSound(int id) {
 	if (mc && mc->id == id) {
 		delete mc;
 		_channels[channel] = 0;
+	}
+}
+
+void Mixer::stopAll() {
+	debug(DBG_MIXER, "Mixer::stopAll()");
+	LockAudioStack las(_stub);
+	for (int i = 0; i < kMaxChannels; ++i) {
+		if (_channels[i]) {
+			delete _channels[i];
+			_channels[i] = 0;
+		}
 	}
 }
 

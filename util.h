@@ -10,13 +10,12 @@
 
 enum {
 	DBG_INFO     = 1 << 0,
-	DBG_RES      = 1 << 1,
-	DBG_GAME     = 1 << 2,
-	DBG_PARSER   = 1 << 3,
-	DBG_OPCODES  = 1 << 4,
-	DBG_DIALOGUE = 1 << 5,
-	DBG_WIN31    = 1 << 6,
-	DBG_MIXER    = 1 << 7
+	DBG_GAME     = 1 << 1,
+	DBG_OPCODES  = 1 << 2,
+	DBG_RES      = 1 << 3,
+	DBG_DIALOGUE = 1 << 4,
+	DBG_MIXER    = 1 << 5,
+	DBG_WIN31    = 1 << 6
 };
 
 extern uint16 g_debugMask;

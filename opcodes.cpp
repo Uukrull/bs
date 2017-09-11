@@ -747,7 +747,7 @@ bool Game::cop_testObjectAndObjectYPos() {
 	return false;
 }
 
-/*bool Game::cop_testObjectMotionXPos() {
+bool Game::cop_testObjectMotionXPos() {
 	debug(DBG_OPCODES, "Game::cop_testObjectMotionXPos()");
 	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
 	if (index != -1) {
@@ -765,7 +765,7 @@ bool Game::cop_testObjectAndObjectYPos() {
 			_ax = _sceneObjectFramesTable[so->frameNumPrev].hdr.xPos;
 			_ax -= _sceneObjectFramesTable[var1A].hdr.xPos;
 		}
-		if (so->flipMode == 2) {
+		if (so->flipInit == 2) {
 			_dx = 1 - _sceneObjectFramesTable[var1A].hdr.w - 6;
 		} else {
 			_dx = 0;
@@ -788,7 +788,7 @@ bool Game::cop_testObjectAndObjectYPos() {
 		_objectScript.dataOffset += 4;
 	}
 	return false;
-}*/
+}
 
 bool Game::cop_testObjectMotionYPos() {
 	debug(DBG_OPCODES, "Game::cop_testObjectMotionYPos()");
@@ -1109,12 +1109,12 @@ bool Game::cop_isCurrentBagObject() {
 	return index != -1 && _currentBagObject == index;
 }
 
-/*bool Game::cop_isNotCurrentBagObject() {
+bool Game::cop_isNotCurrentBagObject() {
 	debug(DBG_OPCODES, "Game::cop_isNotCurrentBagObject");
 	const char *name = _objectScript.fetchNextString();
 	int index = findBagObjectByName(name);
 	return index != -1 && _currentBagObject != index;
-}*/
+}
 
 bool Game::cop_isLifeBarDisplayed() {
 	debug(DBG_OPCODES, "Game::cop_isLifeBarDisplayed");
@@ -1162,7 +1162,7 @@ void Game::oop_initializeObject() {
 		} else if (op == 1) {
 			int16 mode = so->mode;
 			so->mode = 1;
-			reinitializeObjects(index);
+			reinitializeObject(index);
 			so->mode = mode;
 			if (so->state == 2) {
 				so->state = 1;
@@ -1176,7 +1176,7 @@ void Game::oop_initializeObject() {
 			} else {
 				int16 mode = so->mode;
 				so->mode = 3;
-				reinitializeObjects(index);
+				reinitializeObject(index);
 				so->mode = mode;
 			}
 		}
@@ -1268,6 +1268,7 @@ void Game::oop_adjustObjectPos_vv0000() {
 }
 
 void Game::oop_adjustObjectPos_vv1v00() {
+	debug(DBG_OPCODES, "Game::oop_adjustObjectPos_vv1v00()");
 	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
 	if (index != -1) {
 		int16 a0 = _objectScript.fetchNextWord();
@@ -1281,6 +1282,7 @@ void Game::oop_adjustObjectPos_vv1v00() {
 }
 
 void Game::oop_adjustObjectPos_vv001v() {
+	debug(DBG_OPCODES, "Game::oop_adjustObjectPos_vv001v()");
 	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
 	if (index != -1) {
 		int16 a0 = _objectScript.fetchNextWord();
@@ -1308,6 +1310,7 @@ void Game::oop_adjustObjectPos_vv1v1v() {
 }
 
 void Game::oop_setupObjectPos_121() {
+	debug(DBG_OPCODES, "Game::oop_setupObjectPos_121()");
 	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
 	if (index != -1) {
 		setupObjectPos(_objectScript.currentObjectNum, index, _objectScript.objectFound, 1, 2, 1);
@@ -1317,6 +1320,7 @@ void Game::oop_setupObjectPos_121() {
 }
 
 void Game::oop_setupObjectPos_112() {
+	debug(DBG_OPCODES, "Game::oop_setupObjectPos_112()");
 	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
 	if (index != -1) {
 		setupObjectPos(_objectScript.currentObjectNum, index, _objectScript.objectFound, 1, 1, 2);
@@ -1326,6 +1330,7 @@ void Game::oop_setupObjectPos_112() {
 }
 
 void Game::oop_setupObjectPos_122() {
+	debug(DBG_OPCODES, "Game::oop_setupObjectPos_122()");
 	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
 	if (index != -1) {
 		setupObjectPos(_objectScript.currentObjectNum, index, _objectScript.objectFound, 1, 2, 2);
@@ -1335,6 +1340,7 @@ void Game::oop_setupObjectPos_122() {
 }
 
 void Game::oop_setupObjectPos_132() {
+	debug(DBG_OPCODES, "Game::oop_setupObjectPos_132()");
 	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
 	if (index != -1) {
 		setupObjectPos(_objectScript.currentObjectNum, index, _objectScript.objectFound, 1, 3, 2);
@@ -1344,6 +1350,7 @@ void Game::oop_setupObjectPos_132() {
 }
 
 void Game::oop_setupObjectPos_123() {
+	debug(DBG_OPCODES, "Game::oop_setupObjectPos_123()");
 	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
 	if (index != -1) {
 		setupObjectPos(_objectScript.currentObjectNum, index, _objectScript.objectFound, 1, 2, 3);
@@ -1364,6 +1371,7 @@ void Game::oop_adjustObjectPos_1v0000() {
 }
 
 void Game::oop_adjustObjectPos_1v1v00() {
+	debug(DBG_OPCODES, "Game::oop_adjustObjectPos_1v1v00()");
 	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
 	if (index != -1) {
 		int16 a0 = _objectScript.fetchNextWord();
@@ -1376,6 +1384,7 @@ void Game::oop_adjustObjectPos_1v1v00() {
 }
 
 void Game::oop_adjustObjectPos_1v001v() {
+	debug(DBG_OPCODES, "Game::oop_adjustObjectPos_1v001v()");
 	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
 	if (index != -1) {
 		int16 a0 = _objectScript.fetchNextWord();
@@ -1411,6 +1420,7 @@ void Game::oop_setupObjectPos_021() {
 }
 
 void Game::oop_setupObjectPos_012() {
+	debug(DBG_OPCODES, "Game::oop_setupObjectPos_012()");
 	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
 	if (index != -1) {
 		setupObjectPos(_objectScript.currentObjectNum, index, _objectScript.objectFound, 0, 1, 2);
@@ -1420,6 +1430,7 @@ void Game::oop_setupObjectPos_012() {
 }
 
 void Game::oop_setupObjectPos_022() {
+	debug(DBG_OPCODES, "Game::oop_setupObjectPos_022()");
 	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
 	if (index != -1) {
 		setupObjectPos(_objectScript.currentObjectNum, index, _objectScript.objectFound, 0, 2, 2);
@@ -1429,6 +1440,7 @@ void Game::oop_setupObjectPos_022() {
 }
 
 void Game::oop_setupObjectPos_032() {
+	debug(DBG_OPCODES, "Game::oop_setupObjectPos_032()");
 	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
 	if (index != -1) {
 		setupObjectPos(_objectScript.currentObjectNum, index, _objectScript.objectFound, 0, 3, 2);
@@ -1438,6 +1450,7 @@ void Game::oop_setupObjectPos_032() {
 }
 
 void Game::oop_setupObjectPos_023() {
+	debug(DBG_OPCODES, "Game::oop_setupObjectPos_023()");
 	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
 	if (index != -1) {
 		setupObjectPos(_objectScript.currentObjectNum, index, _objectScript.objectFound, 0, 2, 3);
@@ -1516,6 +1529,7 @@ void Game::oop_setObjectMode() {
 }
 
 void Game::oop_setObjectInitPos() {
+	debug(DBG_OPCODES, "Game::oop_setObjectInitPos()");
 	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
 	if (index != -1) {
 		SceneObject *so = derefSceneObject(index);
@@ -1527,6 +1541,7 @@ void Game::oop_setObjectInitPos() {
 }
 
 void Game::oop_setObjectTransformInitPos() {
+	debug(DBG_OPCODES, "Game::oop_setObjectTransformInitPos()");
 	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
 	if (index != -1) {
 		SceneObject *so = derefSceneObject(index);
@@ -1538,6 +1553,7 @@ void Game::oop_setObjectTransformInitPos() {
 }
 
 void Game::oop_evalObjectXInit() {
+	debug(DBG_OPCODES, "Game::oop_evalObjectXInit()");
 	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
 	if (index != -1) {
 		SceneObject *so = derefSceneObject(index);
@@ -1548,6 +1564,7 @@ void Game::oop_evalObjectXInit() {
 }
 
 void Game::oop_evalObjectYInit() {
+	debug(DBG_OPCODES, "Game::oop_evalObjectYInit()");
 	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
 	if (index != -1) {
 		SceneObject *so = derefSceneObject(index);
@@ -1569,6 +1586,7 @@ void Game::oop_evalObjectZInit() {
 }
 
 void Game::oop_setObjectFlipInit() {
+	debug(DBG_OPCODES, "Game::oop_setObjectFlipInit()");
 	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
 	if (index != -1) {
 		SceneObject *so = derefSceneObject(index);
@@ -1579,6 +1597,7 @@ void Game::oop_setObjectFlipInit() {
 }
 
 void Game::oop_setObjectCel() {
+	debug(DBG_OPCODES, "Game::oop_setObjectCel()");
 	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
 	if (index != -1) {
 		SceneObject *so = derefSceneObject(index);
@@ -1590,6 +1609,7 @@ void Game::oop_setObjectCel() {
 }
 
 void Game::oop_resetObjectCel() {
+	debug(DBG_OPCODES, "Game::oop_resetObjectCel()");
 	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
 	if (index != -1) {
 		SceneObject *so = derefSceneObject(index);
@@ -1613,12 +1633,14 @@ void Game::oop_getSceneNumberInVar() {
 }
 
 void Game::oop_disableBox() {
+	debug(DBG_OPCODES, "Game::oop_disableBox()");
 	int box = _objectScript.fetchNextWord();
 	int index = _objectScript.fetchNextWord();
 	derefBox(box, index)->state = 0;
 }
 
 void Game::oop_enableBox() {
+	debug(DBG_OPCODES, "Game::oop_enableBox()");
 	int box = _objectScript.fetchNextWord();
 	int index = _objectScript.fetchNextWord();
 	derefBox(box, index)->state = 1;
@@ -1786,7 +1808,7 @@ void Game::oop_playSoundLowerEqualPriority() {
 	debug(DBG_OPCODES, "Game::oop_playSoundLowerEqualPriority()");
 	int num = _objectScript.fetchNextWord();
 	int priority = _objectScript.fetchNextWord();
-	if (priority > _currentPlayingSoundPriority) { // TODO: maybe just ignore it ?
+	if (priority > _currentPlayingSoundPriority) {
 		if (win31_sndPlaySound(22) == 0) {
 			return;
 		}
@@ -1815,6 +1837,7 @@ void Game::oop_playSoundLowerPriority() {
 }
 
 void Game::oop_startDialogue() {
+	debug(DBG_OPCODES, "Game::oop_startDialogue()");
 	_scriptDialogId = _objectScript.fetchNextString();
 	_scriptDialogFileName = _objectScript.fetchNextString();
 	_scriptDialogSprite1 = _objectScript.fetchNextString();

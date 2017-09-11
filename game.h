@@ -131,8 +131,10 @@ struct Script {
 
 	const char *fetchNextString() {
 		int len = fetchNextWord();
+		assert(len >= 1);
 		const char *str = (const char *)(data + dataOffset);
 		dataOffset += len;
+		assert(len >= 1 && str[len - 1] == '\0');
 		return str;
 	}
 
@@ -260,11 +262,10 @@ struct Game {
 	// game.cpp
 	void restart();
 	void mainLoop();
-//	bool isObjectInRect(int object);
 	void updateKeyPressedTable();
 	void setupScreenPalette(const uint8 *src);
 	void clearSceneData(int anim);
-	void reinitializeObjects(int index);
+	void reinitializeObject(int object);
 	void updateObjects();
 	void runObjectsScript();
 	int findBagObjectByName(const char *objectName) const;
@@ -278,6 +279,8 @@ struct Game {
 	void drawObjectVerticalFlip(int x, int y, const uint8 *src, SceneBitmap *dst);
 	void redrawObjectBoxes(int previousObject, int currentObject);
 	void redrawObjects(bool skipUpdateScreen);
+	void playVideo(const char *name);
+	void playBitmapSequenceDemo();
 	void stopMusic();
 	void playMusic(const char *name);
 	void changeObjectMotionFrame(int object, int object2, int useObject2, int count1, int count2, int useDx, int dx, int useDy, int dy);
@@ -422,6 +425,7 @@ struct Game {
 	RandomGenerator _rnd;
 	SystemStub *_stub;
 	Mixer *_mixer;
+	const char *_dataPath;
 	const char *_savePath;
 	const char *_musicPath;
 	int _stateSlot;
@@ -494,7 +498,7 @@ struct Game {
 	int _previousBagAction;
 	int _currentBagObject;
 	int _previousBagObject;
-	bool _startEndingScene;
+//	bool _startEndingScene;
 //	bool _skipUpdateScreen;
 	int _currentPlayingSoundPriority;
 	bool _lifeBarDisplayed;

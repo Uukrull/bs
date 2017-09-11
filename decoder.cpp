@@ -42,17 +42,16 @@ struct BitStream {
 
 int decodeLzss(const uint8 *src, uint8 *dst) {
 	BitStream stream;
-	int outputSize = READ_LE_UINT32(&src[0]);
-	int inputSize = READ_LE_UINT32(&src[4]);
-	const uint8 *compressedData = src + 8;
-	while (inputSize != 0) {
+	int outputSize = READ_LE_UINT32(src); src += 4;
+	int inputSize = READ_LE_UINT32(src); src += 4;
+	for (const uint8 *compressedData = src; inputSize != 0; compressedData += 0x1000) {
 		int decodeSize = inputSize;
 		if (decodeSize > 256) {
 			decodeSize = 256;
 		}
 		inputSize -= decodeSize;
-		src = compressedData;
 #if 1
+		src = compressedData;
 		uint16 crc = READ_LE_UINT16(src); src += 2;
 		uint16 sum = 0;
 		for (int i = 0; i < decodeSize * 8 - 1; ++i) {
@@ -64,7 +63,6 @@ int decodeLzss(const uint8 *src, uint8 *dst) {
 		}
 #endif
 		src = compressedData + 2;
-		compressedData += 0x1000;
 		stream.reset(src);
 		while (1) {
 			if (stream.getNextBit()) {

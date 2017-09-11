@@ -56,7 +56,7 @@ void Game::loadCommonSprites() {
 	memcpy(_bagBackgroundImage.bits, _bitmapBuffer1.bits, bagBitmapSize);
 
 	loadFile("..\\bermuda.spr", _tempDecodeBuffer);
-	int decodedSize = READ_LE_UINT16(_tempDecodeBuffer + 2);
+	int decodedSize = READ_LE_UINT32(_tempDecodeBuffer + 2);
 	_bermudaSprData = (uint8 *)malloc(decodedSize);
 	if (!_bermudaSprData) {
 		error("Unable to allocate bermuda.spr buffer (%d bytes)", decodedSize);
@@ -94,12 +94,19 @@ void Game::loadCommonSprites() {
 			_ammoIconImageTable[i][j] = _ammoIconImageTable[i][j - 1] + getBitmapSize(_ammoIconImageTable[i][j - 1]);
 		}
 	}
-	_swordIconImage = _ammoIconImageTable[1][4] + getBitmapSize(_ammoIconImageTable[1][4]);
-	_iconBackgroundImage = _swordIconImage + getBitmapSize(_swordIconImage);
-	_lifeBarImage = _iconBackgroundImage + getBitmapSize(_iconBackgroundImage);
-	_bagWeaponAreaBlinkImageTable[0] = _lifeBarImage + getBitmapSize(_lifeBarImage);
-	for (int i = 1; i < 10; ++i) {
-		_bagWeaponAreaBlinkImageTable[i] = _bagWeaponAreaBlinkImageTable[i - 1] + getBitmapSize(_bagWeaponAreaBlinkImageTable[i - 1]);
+	if (_isDemo) {
+		_swordIconImage = 0;
+		_iconBackgroundImage = _ammoIconImageTable[1][4] + getBitmapSize(_ammoIconImageTable[1][4]);
+		_lifeBarImage = _iconBackgroundImage + getBitmapSize(_iconBackgroundImage);
+		memset(_bagWeaponAreaBlinkImageTable, 0, sizeof(_bagWeaponAreaBlinkImageTable));
+	} else {
+		_swordIconImage = _ammoIconImageTable[1][4] + getBitmapSize(_ammoIconImageTable[1][4]);
+		_iconBackgroundImage = _swordIconImage + getBitmapSize(_swordIconImage);
+		_lifeBarImage = _iconBackgroundImage + getBitmapSize(_iconBackgroundImage);
+		_bagWeaponAreaBlinkImageTable[0] = _lifeBarImage + getBitmapSize(_lifeBarImage);
+		for (int i = 1; i < 10; ++i) {
+			_bagWeaponAreaBlinkImageTable[i] = _bagWeaponAreaBlinkImageTable[i - 1] + getBitmapSize(_bagWeaponAreaBlinkImageTable[i - 1]);
+		}
 	}
 }
 
@@ -119,6 +126,7 @@ void Game::unloadCommonSprites() {
 }
 
 uint8 *Game::loadFile(const char *fileName, uint8 *dst, uint32 *dstSize) {
+	debug(DBG_RES, "Game::loadFile('%s')", fileName);
 	FileHolder fp(_fs, fileName);
 	uint32 fileSize = fp->size();
 	if (!dst) {
@@ -135,6 +143,7 @@ uint8 *Game::loadFile(const char *fileName, uint8 *dst, uint32 *dstSize) {
 }
 
 void Game::loadWGP(const char *fileName) {
+	debug(DBG_RES, "Game::loadWGP('%s')", fileName);
 	FileHolder fp(_fs, fileName);
 	int offs = kOffsetBitmapBits;
 	int len = 0;
@@ -149,7 +158,7 @@ void Game::loadWGP(const char *fileName) {
 			int sz = fp->readUint16LE();
 			if (sz != 0) {
 				fp->read(_bitmapBuffer2, sz);
-				uint32 decodedSize = decodeLzss(_bitmapBuffer2, _bitmapBuffer0 + len);
+				int decodedSize = decodeLzss(_bitmapBuffer2, _bitmapBuffer0 + len);
 				len += decodedSize;
 			}
 		}
@@ -170,6 +179,7 @@ void Game::loadWGP(const char *fileName) {
 }
 
 void Game::loadSPR(const char *fileName, SceneAnimation *sa) {
+	debug(DBG_RES, "Game::loadSPR('%s')", fileName);
 	FileHolder fp(_fs, fileName);
 	int tag = fp->readUint16LE();
 	if (tag != 0x3553) {
@@ -221,6 +231,7 @@ static void dumpObjectScript(SceneAnimation *sa) {
 }
 
 void Game::loadMOV(const char *fileName) {
+	debug(DBG_RES, "Game::loadMOV('%s')", fileName);
 	FileHolder fp(_fs, fileName);
 	int tag = fp->readUint16LE();
 	if (tag != 0x354D) {

@@ -1,6 +1,6 @@
 
 Bermuda Syndrome/SDL README
-Release version: 0.1.1 (Aug 6 2007)
+Release version: 0.1.2 (Aug 15 2007)
 -------------------------------------------------------------------------------
 
 
@@ -9,7 +9,7 @@ About:
 
 This program is a re-implementation of the engine used in the game Bermuda
 Syndrome made by Century Interactive and published by BMG in 1995. The original
-data files are required (the demo version is unsupported).
+data files are required (retail or demo versions).
 
 This rewrite is based on the reversing of the original Windows executable. More
 informations about the game can be found at [1] and [2].
@@ -28,7 +28,7 @@ By default, the engine will try to load the game data files from the 'DATA'
 directory. The savestates are saved in the current directory. If you have the
 CD game soundtrack, you can rip the tracks to 22 Khz mono Vorbis .ogg files.
 
-These paths can be changed using command line switches :
+The paths can be changed using command line switches :
 
 	Usage: bs [OPTIONS]...
   	--datapath=PATH    Path to data files (default 'DATA')
@@ -56,7 +56,6 @@ Other hotkeys:
 Todo:
 -----
 
-- Add support for introduction and ending sequences (original game executable plays .avi files)
 - Speed up the screen rendering
 - Add 320x240 downscaler
 - Add/uncomment required opcodes

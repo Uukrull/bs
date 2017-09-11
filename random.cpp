@@ -17,11 +17,13 @@ void RandomGenerator::setSeed(uint16 seed) {
 
 // Borland C random generator
 uint16 RandomGenerator::getNumber() {
-	uint16 rnd = 0x15A * (_randomSeed & 0xFFFF);
-	if ((_randomSeed >> 16) != 0) {
-		rnd += 0x4E35 * (_randomSeed >> 16);
+	const uint16 randomSeedLo = _randomSeed & 0xFFFF;
+	const uint16 randomSeedHi = _randomSeed >> 16;
+	uint16 rnd = 0x15A * randomSeedLo; 
+	if (randomSeedHi != 0) {
+		rnd += 0x4E35 * randomSeedHi; 
 	}
-	_randomSeed = (rnd << 16) | (0x4E35 * (_randomSeed & 0xFFFF));
+	_randomSeed = (rnd << 16) | ((0x4E35 * randomSeedLo) & 0xFFFF);
 	++_randomSeed;
 	return _randomSeed & 0x7FFF;
 }

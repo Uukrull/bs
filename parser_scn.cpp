@@ -309,7 +309,7 @@ static void parseToken_Object(char **s, Game *g) {
 			_currentSceneObject = &g->_sceneObjectsTable[i];
 		}
 	}
-	if (_currentState == 4 && _currentSceneObject) { // kParserStateObject
+	if (_currentState == kParserStateObject && _currentSceneObject) {
 		memset(_currentSceneObject->varsTable, 0, sizeof(_currentSceneObject->varsTable));
 		_currentSceneObject->state = 0;
 	}
@@ -510,7 +510,7 @@ void Game::parseSCN(const char *fileName) {
 	_currentSceneObject = 0;
 	memcpy(_defaultVarsTable, _varsTable, sizeof(_varsTable));
 
-	_currentState = 0; // kParserStateDef
+	_currentState = kParserStateDef;
 	_stopParsing = false;
 	for (char *s = _sceneDescriptionBuffer; !_stopParsing && s; ) {
 		bool didTest = false;
@@ -530,14 +530,14 @@ void Game::parseSCN(const char *fileName) {
 			}
 			_currentToken = getNextToken(&s);
 		}
-		if (_currentState != 0) { // kParserStateDef
-			switch (_currentState - 1) { // _currentState
-			case 0: // kParserStateMovies
+		if (_currentState != kParserStateDef) {
+			switch (_currentState) {
+			case kParserStateMovies:
 				if (_currentToken == kParserTokenMoviesEnd) {
 					if (!loadMovData) {
 						clearSceneData(anim - 1);
 					}
-					_currentState = 0; // kParserStateDef
+					_currentState = kParserStateDef;
 					break;
 				}
 				if (!loadMovData) {
@@ -555,30 +555,30 @@ void Game::parseSCN(const char *fileName) {
 					loadMOV(_currentTokenStr);
 				}
 				break;
-			case 1: // kParserStateBag
+			case kParserStateBag:
 				if (_currentToken == kParserTokenBagEnd) {
-					_currentState = 0; // kParserStateDef
+					_currentState = kParserStateDef;
 					break;
 				}
 				parse_BagObject(&s, this);
 				break;
-			case 2: // kParserStateScene
+			case kParserStateScene:
 				if (_currentToken == kParserTokenSceneEnd) {
-					_currentState = 0; // kParserStateDef
+					_currentState = kParserStateDef;
 					break;
 				}
 				parse_SceneCondition(&s, this);
 				break;
-			case 3: // kParserStateObject
+			case kParserStateObject:
 				if (_currentToken == kParserTokenObjectEnd) {
-					_currentState = 0; // kParserStateDef
+					_currentState = kParserStateDef;
 					break;
 				}
 				parse_Object(&s, this);
 				break;
-			case 4: // kParserStateNewObject
+			case kParserStateNewObject:
 				if (_currentToken == kParserTokenObjectEnd) {
-					_currentState = 0; // kParserStateDef
+					_currentState = kParserStateDef;
 					break;
 				}
 				if (_currentSceneObject) {
@@ -588,9 +588,9 @@ void Game::parseSCN(const char *fileName) {
 				}
 				parse_Object(&s, this);
 				break;
-			case 5: // kParserStateBox
+			case kParserStateBox:
 				if (_currentToken == kParserTokenBoxEnd) {
-					_currentState = 0; // kParserStateDef
+					_currentState = kParserStateDef;
 					break;
 				}
 				parse_BoxDescription(&s, this);
@@ -602,10 +602,10 @@ void Game::parseSCN(const char *fileName) {
 				_stopParsing = true;
 				break;
 			case kParserTokenMovies:
-				_currentState = 1; // kParserStateMovies
+				_currentState = kParserStateMovies;
 				break;
 			case kParserTokenScene:
-				_currentState = 3; // kParserStateScene
+				_currentState = kParserStateScene;
 				break;
 			case kParserTokenScreen:
 				parseToken_Screen(&s, this);
@@ -617,19 +617,19 @@ void Game::parseSCN(const char *fileName) {
 				parseToken_Midi(&s, this);
 				break;
 			case kParserTokenObject:
-				_currentState = 4; // kParserStateObject
+				_currentState = kParserStateObject;
 				parseToken_Object(&s, this);
 				break;
 			case kParserTokenIfNewObject:
-				_currentState = 5; // kParserStateNewObject
+				_currentState = kParserStateNewObject;
 				parseToken_Object(&s, this);
 				break;
 			case kParserTokenBag:
-				_currentState = 2; // kParserStateBag
+				_currentState = kParserStateBag;
 				parseToken_Bag(&s, this);
 				break;
 			case kParserTokenBox:
-				_currentState = 6; // kParserStateBox
+				_currentState = kParserStateBox;
 				break;
 			default:
 				error("Unexpected token %d state %d", _currentToken, _currentState);

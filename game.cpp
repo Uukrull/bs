@@ -3,6 +3,7 @@
  * Copyright (C) 2007 Gregory Montoir
  */
 
+#include "avi_player.h"
 #include "decoder.h"
 #include "file.h"
 #include "game.h"
@@ -13,9 +14,10 @@
 static const char *_gameWindowTitle = "Bermuda Syndrome";
 
 Game::Game(SystemStub *stub, const char *dataPath, const char *savePath, const char *musicPath)
-	: _fs(dataPath), _stub(stub), _savePath(savePath), _musicPath(musicPath) {
+	: _fs(dataPath), _stub(stub), _dataPath(dataPath), _savePath(savePath), _musicPath(musicPath) {
 	_mixer = new Mixer(_stub);
 	_isDemo = _fs.existFile("-00.SCN");
+	_stateSlot = 1;
 }
 
 Game::~Game() {
@@ -23,7 +25,7 @@ Game::~Game() {
 }
 
 void Game::restart() {
-	_stateSlot = 1;
+	_mixer->stopAll();
 	_mixerSoundId = Mixer::kDefaultSoundId;
 	_mixerMusicId = Mixer::kDefaultSoundId;
 
@@ -50,7 +52,7 @@ void Game::restart() {
 	_loadDataState = 0;
 	_previousBagAction = _currentBagAction = 0;
 	_previousBagObject = _currentBagObject = -1;
-	_startEndingScene = false;
+//	_startEndingScene = false;
 //	_skipUpdateScreen = false;
 	_currentPlayingSoundPriority = 0;
 	_lifeBarDisplayed2 = _lifeBarDisplayed = false;
@@ -97,6 +99,12 @@ void Game::mainLoop() {
 	_mixer->open();
 
 	restart();
+	if (_isDemo) {
+		playBitmapSequenceDemo();
+	} else {
+		playVideo("data/logo.avi");
+		playVideo("data/intro.avi");
+	}
 	_lastFrameTimeStamp = _stub->getTimeStamp();
 	while (!_stub->_quit) {
 		if (_switchScene) {
@@ -110,6 +118,17 @@ void Game::mainLoop() {
 				}
 				strcpy(_currentSceneScn, _tempTextBuffer);
 				parseSCN(_tempTextBuffer);
+			} else if (stringEndsWith(_tempTextBuffer, "SAV")) {
+				if (_isDemo && strcmp(_tempTextBuffer, "A16.SAV") == 0) {
+					debug(DBG_GAME, "End interactive part of the demo");
+					restart();
+					continue;
+				} else {
+					warning("Ignoring savestate load '%s'\n", _tempTextBuffer);
+					// should work though, as the original savestates load fine
+					// now, but this "feature" is only used in the demo AFAICT,
+					// so no need to bother...
+				}
 			} else {
 				debug(DBG_GAME, "load mov '%s'", _tempTextBuffer);
 				loadMOV(_tempTextBuffer);
@@ -131,8 +150,9 @@ void Game::mainLoop() {
 				setupScreenPalette(_bitmapBuffer0 + kOffsetBitmapPalette);
 			}
 			_gameOver = false;
-			for (int i = 0; i < _sceneObjectsCount; ++i) { // XXX not in the original unless I miss something, fixes _08->TELE05
-				reinitializeObjects(i);
+			// FIXME not in the original unless I miss something ; fixes _08->TELE05 scene switch
+			for (int i = 0; i < _sceneObjectsCount; ++i) {
+				reinitializeObject(i);
 			}
 		}
 //		_skipUpdateScreen = true;
@@ -157,6 +177,7 @@ void Game::mainLoop() {
 }
 
 void Game::updateKeyPressedTable() {
+	debug(DBG_GAME, "Game::updateKeyPressedTable()");
 	_keysPressed[13] = _stub->_pi.enter ? 1 : 0;
 	_keysPressed[16] = _stub->_pi.shift ? 1 : 0;
 	_keysPressed[32] = _stub->_pi.space ? 1 : 0;
@@ -183,7 +204,7 @@ void Game::updateKeyPressedTable() {
 	if (_stub->_pi.load) {
 		_stub->_pi.load = false;
 		loadState(_stateSlot, true);
-		_loadState = _switchScene;
+		_loadState = _switchScene; // gamestate will get loaded on scene switch
 	}
 	if (_stub->_pi.save) {
 		_stub->_pi.save = false;
@@ -254,9 +275,9 @@ void Game::clearSceneData(int anim) {
 	}
 }
 
-void Game::reinitializeObjects(int index) { // XXX reinitializeObject(int object) {
-	debug(DBG_GAME, "Game::reinitializeObjects(%d)", index);
-	SceneObject *so = derefSceneObject(index);
+void Game::reinitializeObject(int object) {
+	debug(DBG_GAME, "Game::reinitializeObject(%d)", object);
+	SceneObject *so = derefSceneObject(object);
 	if (so->state != 1 && so->state != 2) {
 		int16 state = 0;
 		switch (so->mode) {
@@ -396,7 +417,7 @@ void Game::runObjectsScript() {
 			_switchScene = true;
 		}
 		for (int i = 0; i < _sceneObjectsCount; ++i) {
-			reinitializeObjects(i);
+			reinitializeObject(i);
 		}
 		if (_varsTable[0] >= 10 && !_gameOver) {
 			strcpy(_musicName, "..\\midi\\gameover.mid");
@@ -410,10 +431,13 @@ void Game::runObjectsScript() {
 	}
 //	_skipUpdateScreen = false;
 	if (_varsTable[241] == 1) {
-		_startEndingScene = true;
+//		_startEndingScene = true;
 		stopMusic();
 		clearSceneData(-1);
 		_varsTable[241] = 2;
+		playVideo("data/final.avi");
+		strcpy(_tempTextBuffer, "END.SCN");
+		_switchScene = true;
 	}
 }
 
@@ -681,6 +705,7 @@ void Game::drawObjectVerticalFlip(int x, int y, const uint8 *src, SceneBitmap *d
 }
 
 void Game::redrawObjectBoxes(int previousObject, int currentObject) {
+	debug(DBG_GAME, "Game::redrawObjectBoxes(%d, %d)", previousObject, currentObject);
 	for (int b = 0; b < 10; ++b) {
 		for (int i = 0; i < _boxesCountTable[b]; ++i) {
 			Box *box = &_boxesTable[b][i];
@@ -701,25 +726,6 @@ void Game::redrawObjectBoxes(int previousObject, int currentObject) {
 	}
 }
 
-#if 0
-bool Game::isObjectInRect(int object) {
-	SceneObject *so = _sortedSceneObjectsTable[object];
-	if (so->xPrev + _sceneObjectFramesTable[so->frameNumPrev].hdr.w < so->x) {
-		return false;
-	}
-	if (so->x + _sceneObjectFramesTable[so->frameNum].hdr.w < so->xPrev) {
-		return false;
-	}
-	if (so->yPrev + _sceneObjectFramesTable[so->frameNumPrev].hdr.h < so->y) {
-		return false;
-	}
-	if (so->y + _sceneObjectFramesTable[so->frameNum].hdr.h < so->yPrev) {
-		return false;
-	}
-	return true;
-}
-#endif
-
 void Game::redrawObjects(bool skipUpdateScreen) {
 	sortObjects();
 	int previousObject = -1;
@@ -731,12 +737,18 @@ void Game::redrawObjects(bool skipUpdateScreen) {
 			}
 			previousObject = i;
 			decodeLzss(_sceneObjectFramesTable[so->frameNum].data, _tempDecodeBuffer);
+			if (_isDemo && _sceneNumber == 1 && i == 14) {
+				// FIXME fixes wrong overlapping icon in the first scene of the demo
+				//   object 13 pos 582,423 frame 1885 - should be displayed
+				//   object 14 pos 582,423 frame 1884 - shouldn't be displayed
+				continue;
+			}
 			if (so->flip == 2) {
-				int16 _ax = _bitmapBuffer1.h + 1 - so->y - _sceneObjectFramesTable[so->frameNum].hdr.h;
-				drawObjectVerticalFlip(so->x, _ax, _tempDecodeBuffer, &_bitmapBuffer1);
+				int16 y = _bitmapBuffer1.h + 1 - so->y - _sceneObjectFramesTable[so->frameNum].hdr.h;
+				drawObjectVerticalFlip(so->x, y, _tempDecodeBuffer, &_bitmapBuffer1);
 			} else {
-				int16 _ax = _bitmapBuffer1.h + 1 - so->y - _sceneObjectFramesTable[so->frameNum].hdr.h;
-				drawObject(so->x, _ax, _tempDecodeBuffer, &_bitmapBuffer1);
+				int16 y = _bitmapBuffer1.h + 1 - so->y - _sceneObjectFramesTable[so->frameNum].hdr.h;
+				drawObject(so->x, y, _tempDecodeBuffer, &_bitmapBuffer1);
 			}
 		}
 	}
@@ -744,7 +756,7 @@ void Game::redrawObjects(bool skipUpdateScreen) {
 		redrawObjectBoxes(previousObject, previousObject);
 	}
 	if (_sceneNumber != -1000 && _sceneObjectsCount != 0) {
-		if (_gameOver) {
+		if (!_isDemo && _gameOver) {
 			decodeLzss(_bermudaOvrData + 2, _tempDecodeBuffer);
 			drawObject(93, _bitmapBuffer1.h - 230, _tempDecodeBuffer, &_bitmapBuffer1);
 		}
@@ -758,7 +770,7 @@ void Game::redrawObjects(bool skipUpdateScreen) {
 			int x = _bagPosX + (invW - bagObjW) / 2;
 			drawObject(x, y, _bagObjectsTable[_currentBagObject].data, &_bitmapBuffer1);
 		}
-		if (_bermudaSprData && _lifeBarDisplayed) {
+		if (_lifeBarDisplayed) {
 			drawObject(386, _bitmapBuffer1.h - 18 - getBitmapHeight(_lifeBarImage), _lifeBarImage, &_bitmapBuffer1);
 			if (_varsTable[1] == 1) {
 				drawObject(150, _bitmapBuffer1.h - 18 - getBitmapHeight(_lifeBarImage), _lifeBarImage, &_bitmapBuffer1);
@@ -781,7 +793,8 @@ void Game::redrawObjects(bool skipUpdateScreen) {
 				_lifeBarCurrentFrame = 0;
 			}
 		}
-		if (_bermudaSprData && (_lifeBarDisplayed || _lifeBarDisplayed2)) {
+#if 0
+		if (_lifeBarDisplayed || _lifeBarDisplayed2) {
 			if (_varsTable[2] == 1 || _varsTable[1] == 1) {
 				win31_stretchBits(&_bitmapBuffer1,
 					getBitmapHeight(_lifeBarImage),
@@ -820,11 +833,11 @@ void Game::redrawObjects(bool skipUpdateScreen) {
 				);
 			}
 		}
+#endif
 	}
 	win31_stretchBits(&_bitmapBuffer1, _bitmapBuffer1.h + 1, _bitmapBuffer1.w + 1, 0, 0, _bitmapBuffer1.h + 1, _bitmapBuffer1.w + 1, 0, 0);
 	memcpy(_bitmapBuffer1.bits, _bitmapBuffer3.bits, kGameScreenWidth * kGameScreenHeight);
-
-	if (_bermudaSprData != 0 && _lifeBarDisplayed) {
+	if (_lifeBarDisplayed) {
 		copyBufferToBuffer(386,
 			_bitmapBuffer1.h + 1 - 19 - getBitmapHeight(_lifeBarImage),
 			getBitmapWidth(_lifeBarImage),
@@ -843,7 +856,43 @@ void Game::redrawObjects(bool skipUpdateScreen) {
 	_previousBagAction = _currentBagAction;
 }
 
+void Game::playVideo(const char *name) {
+#if 1
+	char *filePath = (char *)malloc(strlen(_dataPath) + 1 + strlen(name) + 1);
+	if (filePath) {
+		sprintf(filePath, "%s/%s", _dataPath, name);
+		File f;
+		if (f.open(filePath)) {
+			_mixer->close();
+			AVI_Player player(_stub);
+			player.play(&f);
+			_mixer->open();
+		}
+		free(filePath);
+	}
+#endif
+}
+
+void Game::playBitmapSequenceDemo() {
+	const char *bitmapList[] = { "..\\wgp\\title.bmp", "..\\wgp\\title1.bmp", "..\\wgp\\title2.bmp" };
+	for (int i = 0; i < 3; ++i) {
+		loadWGP(bitmapList[i]);
+		_stub->setPalette(_bitmapBuffer0 + kOffsetBitmapPalette, 256);
+		_stub->copyRect(0, 0, kGameScreenWidth, kGameScreenHeight, _bitmapBuffer1.bits, _bitmapBuffer1.pitch);
+		_stub->updateScreen();
+		do {
+			_stub->sleep(10);
+			_stub->processEvents();
+			if (_stub->_quit) {
+				return;
+			}
+		} while (!_stub->_pi.enter);
+		_stub->_pi.enter = false;
+	}
+}
+
 void Game::stopMusic() {
+	debug(DBG_GAME, "Game::stopMusic()");
 	_mixer->stopSound(_mixerMusicId);
 }
 
@@ -852,6 +901,7 @@ void Game::playMusic(const char *name) {
 		const char *fileName;
 		int digitalTrack;
 	} _midiMapping[] = {
+		// retail game version
 		{ "..\\midi\\flyaway.mid", 2 },
 		{ "..\\midi\\jungle1.mid", 3 },
 		{ "..\\midi\\sadialog.mid", 4 },
@@ -862,12 +912,15 @@ void Game::playMusic(const char *name) {
 		{ "..\\midi\\merian1.mid", 9 },
 		{ "..\\midi\\telquad.mid", 10 },
 		{ "..\\midi\\gameover.mid", 11 },
-		{ "..\\midi\\complete.mid", 12 }
+		{ "..\\midi\\complete.mid", 12 },
+		// demo game version
+		{ "..\\midi\\musik.mid", 3 }
 	};
 	assert(_musicTrack == 0);
 	if (name[0] == 0) {
 		return;
 	}
+	debug(DBG_GAME, "Game::playMusic('%s')", name);
 	stopMusic();
 	for (unsigned int i = 0; i < ARRAYSIZE(_midiMapping); ++i) {
 		if (strcasecmp(_midiMapping[i].fileName, name) == 0) {
@@ -887,6 +940,7 @@ void Game::playMusic(const char *name) {
 }
 
 void Game::changeObjectMotionFrame(int object, int object2, int useObject2, int count1, int count2, int useDx, int dx, int useDy, int dy) {
+	debug(DBG_GAME, "Game::changeObjectMotionFrame()");
 	SceneObject *so = derefSceneObject(object);
 	if (so->statePrev != 0) {
 		int num;
@@ -932,6 +986,7 @@ void Game::changeObjectMotionFrame(int object, int object2, int useObject2, int 
 }
 
 int16 Game::getObjectTransformXPos(int object) {
+	debug(DBG_GAME, "Game::getObjectTransformXPos(%d)", object);
 	SceneObject *so = derefSceneObject(object);
 	int16 a0 = _objectScript.fetchNextWord();
 	int16 a2 = _objectScript.fetchNextWord();
@@ -945,6 +1000,7 @@ int16 Game::getObjectTransformXPos(int object) {
 }
 
 int16 Game::getObjectTransformYPos(int object) {
+	debug(DBG_GAME, "Game::getObjectTransformYPos(%d)", object);
 	SceneObject *so = derefSceneObject(object);
 	int16 a0 = _objectScript.fetchNextWord();
 	int16 a2 = _objectScript.fetchNextWord();
@@ -958,6 +1014,7 @@ int16 Game::getObjectTransformYPos(int object) {
 }
 
 bool Game::comparePrevObjectTransformXPos(int object, bool fetchCmp, int cmpX) {
+	debug(DBG_GAME, "Game::comparePrevObjectTransformXPos(%d)", object);
 	SceneObject *so = derefSceneObject(object);
 
 	int16 a0 = _objectScript.fetchNextWord();
@@ -990,6 +1047,7 @@ bool Game::comparePrevObjectTransformXPos(int object, bool fetchCmp, int cmpX) {
 }
 
 bool Game::compareObjectTransformXPos(int object, bool fetchCmp, int cmpX) {
+	debug(DBG_GAME, "Game::compareObjectTransformXPos(%d)", object);
 	SceneObject *so = derefSceneObject(object);
 
 	int16 a0 = _objectScript.fetchNextWord();
@@ -1022,6 +1080,7 @@ bool Game::compareObjectTransformXPos(int object, bool fetchCmp, int cmpX) {
 }
 
 bool Game::comparePrevObjectTransformYPos(int object, bool fetchCmp, int cmpY) {
+	debug(DBG_GAME, "Game::comparePrevObjectTransformYPos(%d)", object);
 	SceneObject *so = derefSceneObject(object);
 
 	int16 a0 = _objectScript.fetchNextWord();
@@ -1054,6 +1113,7 @@ bool Game::comparePrevObjectTransformYPos(int object, bool fetchCmp, int cmpY) {
 }
 
 bool Game::compareObjectTransformYPos(int object, bool fetchCmp, int cmpY) {
+	debug(DBG_GAME, "Game::compareObjectTransformYPos(%d)", object);
 	SceneObject *so = derefSceneObject(object);
 
 	int16 a0 = _objectScript.fetchNextWord();
@@ -1086,6 +1146,7 @@ bool Game::compareObjectTransformYPos(int object, bool fetchCmp, int cmpY) {
 }
 
 void Game::setupObjectPos(int object, int object2, int useObject2, int useData, int type1, int type2) {
+	debug(DBG_GAME, "Game::setupObjectPos(%d)", object);
 	SceneObject *so = derefSceneObject(object);
 	if (so->statePrev != 0) {
 		int16 _ax, varE, varC, var4, var6, var8, varA;

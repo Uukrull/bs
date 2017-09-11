@@ -1,3 +1,7 @@
+/*
+ * Bermuda Syndrome engine rewrite
+ * Copyright (C) 2007 Gregory Montoir
+ */
 
 #include "decoder.h"
 #include "file.h"

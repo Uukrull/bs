@@ -5,7 +5,6 @@
 
 #include "file.h"
 
-
 struct File_impl {
 	bool _ioErr;
 	File_impl() : _ioErr(false) {}

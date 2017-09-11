@@ -6,7 +6,6 @@
 #include <cstdarg>
 #include "util.h"
 
-
 uint16 g_debugMask;
 
 void debug(uint16 cm, const char *msg, ...) {

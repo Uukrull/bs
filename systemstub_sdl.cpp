@@ -25,6 +25,11 @@ struct SystemStub_SDL : SystemStub {
 	int _blitRectsCount;
 	bool _fullScreenRedraw;
 	bool _fullScreenDisplay;
+	int _soundSampleRate;
+	int _soundSampleSize;
+	SDL_Overlay *_yuv;
+	int _yuvW, _yuvH;
+	bool _yuvLocked;
 
 	virtual ~SystemStub_SDL() {}
 	virtual void init(const char *title, int w, int h);
@@ -33,6 +38,9 @@ struct SystemStub_SDL : SystemStub {
 	virtual void copyRect(int x, int y, int w, int h, const uint8 *buf, int pitch, bool transparent);
 	virtual void darkenRect(int x, int y, int w, int h);
 	virtual void updateScreen();
+	virtual void setYUV(bool flag, int w, int h);
+	virtual uint8 *lockYUV(int *pitch);
+	virtual void unlockYUV();
 	virtual void processEvents();
 	virtual void sleep(int duration);
 	virtual uint32 getTimeStamp();
@@ -41,6 +49,7 @@ struct SystemStub_SDL : SystemStub {
 	virtual void startAudio(AudioCallback callback, void *param);
 	virtual void stopAudio();
 	virtual int getOutputSampleRate();
+	virtual int getOutputSampleSize();
 
 	void clipDirtyRect(int &x, int &y, int &w, int &h);
 	void addDirtyRect(int x, int y, int w, int h);
@@ -77,6 +86,8 @@ void SystemStub_SDL::init(const char *title, int w, int h) {
 	memset(_pal, 0, sizeof(_pal));
 	_fullScreenDisplay = false;
 	setScreenDisplay(_fullScreenDisplay);
+	_soundSampleRate = 0;
+	_soundSampleSize = 0;
 }
 
 void SystemStub_SDL::destroy() {
@@ -234,6 +245,52 @@ void SystemStub_SDL::updateScreen() {
 	SDL_UnlockSurface(_screen);
 	SDL_UpdateRects(_screen, _blitRectsCount, _blitRects);
 	_blitRectsCount = 0;
+}
+
+void SystemStub_SDL::setYUV(bool flag, int w, int h) {
+	if (flag) {
+		if (!_yuv) {
+			_yuv = SDL_CreateYUVOverlay(w, h, SDL_UYVY_OVERLAY, _screen);
+			_yuvW = w;
+			_yuvH = h;
+		}
+	} else {
+		if (_yuv) {
+			SDL_FreeYUVOverlay(_yuv);
+			_yuv = 0;
+		}
+	}
+	_yuvLocked = false;
+}
+
+uint8 *SystemStub_SDL::lockYUV(int *pitch) {
+	if (_yuv && !_yuvLocked) {
+		SDL_LockYUVOverlay(_yuv);
+		_yuvLocked = true;
+		if (pitch) {
+			*pitch = _yuv->pitches[0];
+		}
+		return _yuv->pixels[0];
+	}
+	return 0;
+}
+
+void SystemStub_SDL::unlockYUV() {
+	if (_yuv && _yuvLocked) {
+		SDL_UnlockYUVOverlay(_yuv);
+		_yuvLocked = false;
+		SDL_Rect r;
+		if (_yuvW * 2 <= _screenW && _yuvH * 2 <= _screenH) {
+			r.w = _yuvW * 2;
+			r.h = _yuvH * 2;
+		} else {
+			r.w = _yuvW;
+			r.h = _yuvH;
+		}
+		r.x = (_screenW - r.w) / 2;
+		r.y = (_screenH - r.h) / 2;
+		SDL_DisplayYUVOverlay(_yuv, &r);
+	}
 }
 
 void SystemStub_SDL::processEvents() {
@@ -403,7 +460,7 @@ void SystemStub_SDL::unlockAudio() {
 }
 
 void SystemStub_SDL::startAudio(AudioCallback callback, void *param) {
-	SDL_AudioSpec desired;
+	SDL_AudioSpec desired, obtained;
 	memset(&desired, 0, sizeof(desired));
 	desired.freq = kSoundSampleRate;
 	desired.format = AUDIO_S16SYS;
@@ -411,7 +468,9 @@ void SystemStub_SDL::startAudio(AudioCallback callback, void *param) {
 	desired.samples = kSoundSampleSize;
 	desired.callback = callback;
 	desired.userdata = param;
-	if (SDL_OpenAudio(&desired, NULL) == 0) {
+	if (SDL_OpenAudio(&desired, &obtained) == 0) {
+		_soundSampleRate = obtained.freq;
+		_soundSampleSize = obtained.samples / 2;
 		SDL_PauseAudio(0);
 	} else {
 		error("SystemStub_SDL::startAudio() Unable to open sound device");
@@ -423,7 +482,11 @@ void SystemStub_SDL::stopAudio() {
 }
 
 int SystemStub_SDL::getOutputSampleRate() {
-	return kSoundSampleRate;
+	return _soundSampleRate;
+}
+
+int SystemStub_SDL::getOutputSampleSize() {
+	return _soundSampleSize;
 }
 
 void SystemStub_SDL::clipDirtyRect(int &x, int &y, int &w, int &h) {

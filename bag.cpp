@@ -1,7 +1,10 @@
+/*
+ * Bermuda Syndrome engine rewrite
+ * Copyright (C) 2007 Gregory Montoir
+ */
 
 #include "game.h"
 #include "systemstub.h"
-
 
 void Game::handleBagMenu() {
 	if (!(_varsTable[0] < 10 && _loadDataState == 2 && _sceneNumber != -1000))
@@ -144,7 +147,7 @@ void Game::drawBagMenu(int xPosWnd, int yPosWnd) {
 	};
 	for (int i = 0; i < 4; ++i) {
 		int y = _bagBackgroundImage.h - 32 - getBitmapHeight(_bagObjectAreaBlinkImageTable[0]);
-		drawObject(269 + i * 32, y, _bagObjectAreaBlinkImageTable[0], &_bagBackgroundImage);
+		drawObject((_isDemo ? 247 : 269) + i * 32, y, _bagObjectAreaBlinkImageTable[0], &_bagBackgroundImage);
 	}
 
 	// make a copy for drawing (will be restored at the end)
@@ -159,44 +162,47 @@ void Game::drawBagMenu(int xPosWnd, int yPosWnd) {
 	if (_varsTable[2] != 0) {
 		int index = MIN(13 - _varsTable[4], 13);
 		uint8 *p = _weaponIconImageTable[index];
-		int y = _bagBackgroundImage.h - 21 - getBitmapHeight(p);
+		int y = _bagBackgroundImage.h - (_isDemo ? 19 : 21) - getBitmapHeight(p);
 		drawObject(22, y, p, &_bagBackgroundImage);
 		if (_varsTable[3] < 5) {
 			index = _varsTable[4] <= 0 ? 0 : 1;
 			p = _ammoIconImageTable[index][_varsTable[3]];
-			y = _bagBackgroundImage.h - 31 - getBitmapHeight(p);
+			y = _bagBackgroundImage.h - (_isDemo ? 29 : 31) - getBitmapHeight(p);
 			drawObject(33, y, p, &_bagBackgroundImage);
 		}
 	}
-	if (_varsTable[1] != 0) {
+	if (!_isDemo && _varsTable[1] != 0) {
 		int y = _bagBackgroundImage.h - 36 - getBitmapHeight(_swordIconImage);
 		drawObject(22, y, _swordIconImage, &_bagBackgroundImage);
 	}
-
 	int index = (_varsTable[0] >= 10) ? 10 : _varsTable[0];
 	uint8 *lifeBarFrame = _lifeBarImageTable[index][_lifeBarCurrentFrame];
-	drawObject(314, _bagBackgroundImage.h - 51 - getBitmapHeight(lifeBarFrame), lifeBarFrame, &_bagBackgroundImage);
+	drawObject(_isDemo ? 23 : 314, _bagBackgroundImage.h - (_isDemo ? 52 : 51) - getBitmapHeight(lifeBarFrame), lifeBarFrame, &_bagBackgroundImage);
 	if (_currentBagAction < 3) {
 		uint8 *p = _bermudaSprDataTable[_currentBagAction];
-		drawObject(_bagPosItems[_currentBagAction].x, _bagBackgroundImage.h - _bagPosItems[_currentBagAction].y - getBitmapHeight(p), p, &_bagBackgroundImage);
+		int y = _bagBackgroundImage.h - _bagPosItems[_currentBagAction].y - getBitmapHeight(p);
+		int x = _bagPosItems[_currentBagAction].x;
+		if (_isDemo) {
+			x -= 22;
+		}
+		drawObject(x, y, p, &_bagBackgroundImage);
 	}
 	for (int i = 0; i < MIN<int>(_bagObjectsCount, 4); ++i) {
 		uint8 *bagObjectData = _bagObjectsTable[i].data;
-		int x = 261 + i * 32 + (32 - getBitmapWidth(bagObjectData)) / 2;
+		int x = (_isDemo ? 239 : 261) + i * 32 + (32 - getBitmapWidth(bagObjectData)) / 2;
 		int y = _bagBackgroundImage.h - 3 - (40 - getBitmapHeight(bagObjectData)) / 2 - getBitmapHeight(bagObjectData);
 		drawObject(x, y, bagObjectData, &_bagBackgroundImage);
 	}
-
 	if (_currentBagObject >= 0 && _currentBagObject < 4 && _bagObjectsCount != 0) {
 		uint8 *p = _currentBagAction == 3 ? _bagObjectAreaBlinkImageTable[_bagObjectAreaBlinkCounter] : _bagObjectAreaBlinkImageTable[0];
-		drawObject(269 + _currentBagObject * 32, _bagBackgroundImage.h - 32 - getBitmapHeight(p), p, &_bagBackgroundImage);
+		drawObject((_isDemo ? 247 : 269) + _currentBagObject * 32, _bagBackgroundImage.h - 32 - getBitmapHeight(p), p, &_bagBackgroundImage);
 	}
-
-	uint8 *weaponImage1 = _varsTable[1] == 1 ? _bagWeaponAreaBlinkImageTable[_bagWeaponAreaBlinkCounter] : _bagWeaponAreaBlinkImageTable[0];
-	drawObject(87, _bagBackgroundImage.h - 38 - getBitmapHeight(weaponImage1), weaponImage1, &_bagBackgroundImage);
-
-	uint8 *weaponImage2 = _varsTable[2] == 1 ? _bagWeaponAreaBlinkImageTable[_bagWeaponAreaBlinkCounter] : _bagWeaponAreaBlinkImageTable[0];
-	drawObject(87, _bagBackgroundImage.h - 25 - getBitmapHeight(weaponImage2), weaponImage2, &_bagBackgroundImage);
+	if (!_isDemo) {
+		uint8 *weaponImage1 = _varsTable[1] == 1 ? _bagWeaponAreaBlinkImageTable[_bagWeaponAreaBlinkCounter] : _bagWeaponAreaBlinkImageTable[0];
+		drawObject(87, _bagBackgroundImage.h - 38 - getBitmapHeight(weaponImage1), weaponImage1, &_bagBackgroundImage);
+		uint8 *weaponImage2 = _varsTable[2] == 1 ? _bagWeaponAreaBlinkImageTable[_bagWeaponAreaBlinkCounter] : _bagWeaponAreaBlinkImageTable[0];
+		drawObject(87, _bagBackgroundImage.h - 25 - getBitmapHeight(weaponImage2), weaponImage2, &_bagBackgroundImage);
+	}
 
 	_stub->copyRect(xPosWnd, yPosWnd, _bagBackgroundImage.w + 1, _bagBackgroundImage.h + 1, _bagBackgroundImage.bits, _bagBackgroundImage.pitch);
 
