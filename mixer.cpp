@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007-2008 Gregory Montoir
+ * Copyright (C) 2007-2011 Gregory Montoir
  */
 
 #include "file.h"
@@ -101,7 +101,7 @@ struct MixerChannel_Wav : MixerChannel {
 
 	virtual int read(int16 *dst, int samples) {
 		for (int i = 0; i < samples; ++i) {
-			int16 sampleL, sampleR;
+			int16 sampleL = 0, sampleR;
 			if (!readSample(sampleL)) {
 				return i;
 			}

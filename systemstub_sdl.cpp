@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007-2008 Gregory Montoir
+ * Copyright (C) 2007-2011 Gregory Montoir
  */
 
 #include <SDL.h>
@@ -9,7 +9,8 @@
 enum {
 	kMaxBlitRects = 50,
 	kSoundSampleRate = 22050,
-	kSoundSampleSize = 4096
+	kSoundSampleSize = 4096,
+	kVideoSurfaceDepth = 32
 };
 
 struct SystemStub_SDL : SystemStub {
@@ -27,10 +28,14 @@ struct SystemStub_SDL : SystemStub {
 	bool _fullScreenDisplay;
 	int _soundSampleRate;
 	SDL_Overlay *_yuv;
-	int _yuvW, _yuvH;
 	bool _yuvLocked;
 
+	SystemStub_SDL()
+		: _offscreen(0), _offscreenPrev(0), _screen(0),
+		_yuv(0), _yuvLocked(false) {
+	}
 	virtual ~SystemStub_SDL() {}
+
 	virtual void init(const char *title, int w, int h);
 	virtual void destroy();
 	virtual void setPalette(const uint8 *pal, int n);
@@ -78,8 +83,6 @@ void SystemStub_SDL::init(const char *title, int w, int h) {
 	if (_offscreenPrev) {
 		memset(_offscreenPrev, 0, _offscreenSize);
 	}
-#else
-	_offscreenPrev = 0;
 #endif
 	_blurOn = false;
 	memset(_pal, 0, sizeof(_pal));
@@ -89,6 +92,10 @@ void SystemStub_SDL::init(const char *title, int w, int h) {
 }
 
 void SystemStub_SDL::destroy() {
+	if (_offscreenPrev) {
+		free(_offscreenPrev);
+		_offscreenPrev = 0;
+	}
 	if (_offscreen) {
 		free(_offscreen);
 		_offscreen = 0;
@@ -116,10 +123,11 @@ void SystemStub_SDL::fillRect(int x, int y, int w, int h, uint8 color) {
 		return;
 	}
 	addDirtyRect(x, y, w, h);
+	const uint32 fillColor = _pal[color];
 	uint32 *p = _offscreen + y * _screenW + x;
 	while (h--) {
 		for (int i = 0; i < w; ++i) {
-			p[i] = _pal[color];
+			p[i] = fillColor;
 		}
 		p += _screenW;
 	}
@@ -264,8 +272,6 @@ void SystemStub_SDL::setYUV(bool flag, int w, int h) {
 	if (flag) {
 		if (!_yuv) {
 			_yuv = SDL_CreateYUVOverlay(w, h, SDL_UYVY_OVERLAY, _screen);
-			_yuvW = w;
-			_yuvH = h;
 		}
 	} else {
 		if (_yuv) {
@@ -278,12 +284,13 @@ void SystemStub_SDL::setYUV(bool flag, int w, int h) {
 
 uint8 *SystemStub_SDL::lockYUV(int *pitch) {
 	if (_yuv && !_yuvLocked) {
-		SDL_LockYUVOverlay(_yuv);
-		_yuvLocked = true;
-		if (pitch) {
-			*pitch = _yuv->pitches[0];
+		if (SDL_LockYUVOverlay(_yuv) == 0) {
+			_yuvLocked = true;
+			if (pitch) {
+				*pitch = _yuv->pitches[0];
+			}
+			return _yuv->pixels[0];
 		}
-		return _yuv->pixels[0];
 	}
 	return 0;
 }
@@ -293,12 +300,12 @@ void SystemStub_SDL::unlockYUV() {
 		SDL_UnlockYUVOverlay(_yuv);
 		_yuvLocked = false;
 		SDL_Rect r;
-		if (_yuvW * 2 <= _screenW && _yuvH * 2 <= _screenH) {
-			r.w = _yuvW * 2;
-			r.h = _yuvH * 2;
+		if (_yuv->w * 2 <= _screenW && _yuv->h * 2 <= _screenH) {
+			r.w = _yuv->w * 2;
+			r.h = _yuv->h * 2;
 		} else {
-			r.w = _yuvW;
-			r.h = _yuvH;
+			r.w = _yuv->w;
+			r.h = _yuv->h;
 		}
 		r.x = (_screenW - r.w) / 2;
 		r.y = (_screenH - r.h) / 2;
@@ -413,9 +420,11 @@ void SystemStub_SDL::processEvents() {
 					setScreenDisplay(_fullScreenDisplay);
 					break;
 				case SDLK_KP_PLUS:
+				case SDLK_PAGEUP:
 					_pi.stateSlot = 1;
 					break;
 				case SDLK_KP_MINUS:
+				case SDLK_PAGEDOWN:
 					_pi.stateSlot = -1;
 					break;
 				default:
@@ -523,7 +532,7 @@ void SystemStub_SDL::addDirtyRect(int x, int y, int w, int h) {
 }
 
 void SystemStub_SDL::setScreenDisplay(bool fullscreen) {
-	_screen = SDL_SetVideoMode(_screenW, _screenH, 32, fullscreen ? (SDL_HWSURFACE | SDL_FULLSCREEN) : SDL_HWSURFACE);
+	_screen = SDL_SetVideoMode(_screenW, _screenH, kVideoSurfaceDepth, fullscreen ? (SDL_HWSURFACE | SDL_FULLSCREEN) : SDL_HWSURFACE);
 	if (!_screen) {
 		error("SystemStub_SDL::init() Unable to allocate _screen buffer");
 	}

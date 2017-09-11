@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007-2008 Gregory Montoir
+ * Copyright (C) 2007-2011 Gregory Montoir
  */
 
 #ifndef DECODER_H__
@@ -10,4 +10,4 @@
 
 extern int decodeLzss(const uint8 *src, uint8 *dst);
 
-#endif
+#endif // DECODER_H__

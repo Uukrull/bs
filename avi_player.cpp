@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007-2008 Gregory Montoir
+ * Copyright (C) 2007-2011 Gregory Montoir
  */
 
 #include "avi_player.h"
@@ -18,6 +18,7 @@ bool AVI_Demuxer::open(File *f) {
 void AVI_Demuxer::close() {
 	_f = 0;
 	free(_chunkData);
+	_chunkData = 0;
 }
 
 bool AVI_Demuxer::readHeader_avih() {
@@ -179,7 +180,6 @@ void Cinepak_Decoder::decodeFrameV1(Cinepak_YUV_Vector *v) {
 	SET_YUV_V1(&p[4], v->y[3], v->u, v->v);
 }
 
-
 void Cinepak_Decoder::decodeVector(Cinepak_YUV_Vector *v) {
 	for (int i = 0; i < 4; ++i) {
 		v->y[i] = readByte();
@@ -191,11 +191,11 @@ void Cinepak_Decoder::decodeVector(Cinepak_YUV_Vector *v) {
 void Cinepak_Decoder::decode(const uint8 *data, int dataSize) {
 	_data = data;
 
-	uint8 flags = readByte();
+	const uint8 flags = readByte();
 	_data += 3;
 	_w = readWord();
 	_h = readWord();
-	int strips = readWord();
+	const int strips = readWord();
 	assert(_w == AVI_Player::kDefaultFrameWidth && _h == AVI_Player::kDefaultFrameHeight && strips == MAX_STRIPS);
 
 	_xPos = _yPos = 0;
@@ -211,7 +211,7 @@ void Cinepak_Decoder::decode(const uint8 *data, int dataSize) {
 		int size = readWord();
 		readWord();
 		readWord();
-		int stripHeight = readWord();
+		const int stripHeight = readWord();
 		readWord();
 
 		size -= 12;
@@ -328,7 +328,7 @@ void Cinepak_Decoder::decode(const uint8 *data, int dataSize) {
 }
 
 AVI_Player::AVI_Player(SystemStub *stub)
-	: _stub(stub) {
+	: _soundQueue(0), _stub(stub) {
 }
 
 AVI_Player::~AVI_Player() {

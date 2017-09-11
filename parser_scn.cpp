@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007-2008 Gregory Montoir
+ * Copyright (C) 2007-2011 Gregory Montoir
  */
 
 #include "file.h"
@@ -224,9 +224,9 @@ static void getNextToken_Coord(char **s, int16 *i, int16 *j) {
 				errno = 0;
 				*j = strtol(&subTokenStr[1], 0, 0);
 				if (errno == 0) {
-					char *endTokenStr = strchr(&subTokenStr[1], ')');
+					const char *endTokenStr = strchr(&subTokenStr[1], ')');
 					if (endTokenStr) {
-						*s = &endTokenStr[1];
+						*s = (char *)&endTokenStr[1];
 						return;
 					}
 				}
@@ -318,8 +318,6 @@ static void parseToken_Object(char **s, Game *g) {
 			_currentSceneObject->state = 0;
 			// FIXME: fixes _08.SCN TELE05.SCN transition + IARD obj
 			_currentSceneObject->statePrev = 0;
-		} else {
-			warning("Unable to find object '%s'", _currentTokenStr);
 		}
 	}
 }

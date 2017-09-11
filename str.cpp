@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007-2008 Gregory Montoir
+ * Copyright (C) 2007-2011 Gregory Montoir
  */
 
 #include "str.h"
@@ -113,7 +113,7 @@ void stringStripComments(char *p) {
 			break;
 		}
 		char *eol = strstr(cmt, "\r\n");
-		if (cmt[0] == ';') {
+		if (cmt[0] == ';' || cmt[0] == '/') {
 			while (*cmt && cmt != eol) {
 				*cmt++ = ' ';
 			}

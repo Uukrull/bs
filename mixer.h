@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007-2008 Gregory Montoir
+ * Copyright (C) 2007-2011 Gregory Montoir
  */
 
 #ifndef MIXER_H__
@@ -51,4 +51,4 @@ struct Mixer {
 	MixerChannel *_channels[kMaxChannels];
 };
 
-#endif
+#endif // MIXER_H__

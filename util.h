@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007-2008 Gregory Montoir
+ * Copyright (C) 2007-2011 Gregory Montoir
  */
 
 #ifndef UTIL_H__
@@ -24,4 +24,4 @@ extern void debug(uint16 cm, const char *msg, ...);
 extern void error(const char *msg, ...);
 extern void warning(const char *msg, ...);
 
-#endif
+#endif // UTIL_H__

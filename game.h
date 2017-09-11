@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007-2008 Gregory Montoir
+ * Copyright (C) 2007-2011 Gregory Montoir
  */
 
 #ifndef GAME_H__
@@ -177,7 +177,7 @@ enum {
 };
 
 enum {
-	kVarHasWord = 1,
+	kVarHasSword = 1,
 	kVarHasGun = 2,
 	kVarAmmo = 3
 };
@@ -280,10 +280,11 @@ struct Game {
 	void handleDialogue();
 
 	// game.cpp
+	void detectVersion();
 	void restart();
 	void mainLoop();
 	void updateMouseButtonsPressed();
-	void updateKeyPressedTable();
+	void updateKeysPressedTable();
 	void setupScreenPalette(const uint8 *src);
 	void clearSceneData(int anim);
 	void reinitializeObject(int object);
@@ -424,6 +425,7 @@ struct Game {
 	void win16_stretchBits(SceneBitmap *bits, int srcHeight, int srcWidth, int srcY, int srcX, int dstHeight, int dstWidth, int dstY, int dstX);
 
 	bool _isDemo;
+	const char *_startupScene;
 	FileSystem _fs;
 	RandomGenerator _rnd;
 	SystemStub *_stub;

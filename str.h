@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007-2008 Gregory Montoir
+ * Copyright (C) 2007-2011 Gregory Montoir
  */
 
 #ifndef STR_H__
@@ -17,4 +17,4 @@ extern char *stringNextTokenEOL(char **p);
 extern void stringStripComments(char *p);
 extern bool stringEndsWith(const char *p, const char *suf);
 
-#endif
+#endif // STR_H__

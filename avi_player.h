@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007-2008 Gregory Montoir
+ * Copyright (C) 2007-2011 Gregory Montoir
  */
 
 #ifndef AVI_PLAYER_H__
@@ -132,4 +132,4 @@ struct AVI_Player {
 	SystemStub *_stub;
 };
 
-#endif
+#endif // AVI_PLAYER_H__

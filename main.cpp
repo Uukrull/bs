@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007-2008 Gregory Montoir
+ * Copyright (C) 2007-2011 Gregory Montoir
  */
 
 #include "game.h"
@@ -28,6 +28,7 @@ static bool parseOption(const char *arg, const char *longCmd, const char **opt) 
 
 static void exitMain() {
 	if (g_stub) {
+		g_stub->destroy();
 		delete g_stub;
 		g_stub = 0;
 	}
@@ -46,7 +47,7 @@ int main(int argc, char *argv[]) {
 			opt |= parseOption(argv[i], "musicpath=", &musicPath);
 		}
 		if (!opt) {
-			printf(USAGE);
+			printf("%s", USAGE);
 			return 0;
 		}
 	}

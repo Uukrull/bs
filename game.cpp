@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007-2008 Gregory Montoir
+ * Copyright (C) 2007-2011 Gregory Montoir
  */
 
 #include "avi_player.h"
@@ -16,12 +16,28 @@ static const char *_gameWindowTitle = "Bermuda Syndrome";
 Game::Game(SystemStub *stub, const char *dataPath, const char *savePath, const char *musicPath)
 	: _fs(dataPath), _stub(stub), _dataPath(dataPath), _savePath(savePath), _musicPath(musicPath) {
 	_mixer = new Mixer(_stub);
-	_isDemo = _fs.existFile("-00.SCN");
 	_stateSlot = 1;
+	detectVersion();
 }
 
 Game::~Game() {
 	delete _mixer;
+}
+
+void Game::detectVersion() {
+	// underscore ('_') for french & english versions and dash ('-') for german
+	static const char *startupScenesTable[] = { "-01.SCN", "_01.SCN", 0 };
+	_startupScene = 0;
+	for (int i = 0; startupScenesTable[i]; ++i) {
+		if (_fs.existFile(startupScenesTable[i])) {
+			_startupScene = startupScenesTable[i];
+			break;
+		}
+	}
+	if (!_startupScene) {
+		error("Unable to find startup scene file");
+	}
+	_isDemo = _fs.existFile("-00.SCN");
 }
 
 void Game::restart() {
@@ -87,7 +103,7 @@ void Game::restart() {
 	memset(_sceneObjectStatusTable, 0, sizeof(_sceneObjectStatusTable));
 	_sceneObjectStatusCount = 0;
 
-	strcpy(_tempTextBuffer, _isDemo ? "-01.SCN" : "_01.SCN");
+	strcpy(_tempTextBuffer, _startupScene);
 }
 
 void Game::mainLoop() {
@@ -99,8 +115,8 @@ void Game::mainLoop() {
 	if (_isDemo) {
 		playBitmapSequenceDemo();
 	} else {
-		playVideo("data/logo.avi");
-		playVideo("data/intro.avi");
+		playVideo("DATA/LOGO.AVI");
+		playVideo("DATA/INTRO.AVI");
 	}
 	_lastFrameTimeStamp = _stub->getTimeStamp();
 	while (!_stub->_quit) {
@@ -148,10 +164,10 @@ void Game::mainLoop() {
 			_gameOver = false;
 			_workaroundRaftFlySceneBug = strncmp(_currentSceneScn, "FLY", 3) == 0;
 		}
-		runObjectsScript();
+		updateKeysPressedTable();
 		updateMouseButtonsPressed();
+		runObjectsScript();
 		if (!_switchScene) {
-			updateKeyPressedTable();
 			_stub->updateScreen();
 			uint32 end = _lastFrameTimeStamp + kCycleDelay;
 			do {
@@ -184,8 +200,8 @@ void Game::updateMouseButtonsPressed() {
 	}
 }
 
-void Game::updateKeyPressedTable() {
-	debug(DBG_GAME, "Game::updateKeyPressedTable()");
+void Game::updateKeysPressedTable() {
+	debug(DBG_GAME, "Game::updateKeysPressedTable()");
 	_keysPressed[13] = _stub->_pi.enter ? 1 : 0;
 	_keysPressed[16] = _stub->_pi.shift ? 1 : 0;
 	_keysPressed[32] = _stub->_pi.space ? 1 : 0;
@@ -371,7 +387,7 @@ void Game::runObjectsScript() {
 	_objectScript.nextScene = -1;
 	assert(_loadDataState != 3); // unneeded code
 	if (_varsTable[309]) {
-		memset(_keysPressed, 0, 128);
+		memset(_keysPressed, 0, sizeof(_keysPressed));
 	}
 	if (_loadDataState == 2) {
 		int start = _workaroundRaftFlySceneBug ? 1 : 0;
@@ -453,7 +469,7 @@ void Game::runObjectsScript() {
 		stopMusic();
 		clearSceneData(-1);
 		_varsTable[241] = 2;
-		playVideo("data/final.avi");
+		playVideo("DATA/FINAL.AVI");
 		strcpy(_tempTextBuffer, "END.SCN");
 		_switchScene = true;
 	}
@@ -1155,7 +1171,7 @@ void Game::setupObjectPos(int object, int object2, int useObject2, int useData, 
 	SceneObject *so = derefSceneObject(object);
 	SceneObjectFrame *sof = derefSceneObjectFrame(so->frameNumPrev);
 	int16 a0, a2, a4;
-	int16 dy = 0, dx = 0, xmin, xmax, ymin, ymax, _ax;
+	int16 dy = 0, dx = 0, xmin = 0, xmax, ymin = 0, ymax, _ax;
 	if (so->statePrev != 0) {
 		if (type1 == 2) {
 			a0 = _objectScript.fetchNextWord();
