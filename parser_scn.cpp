@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007 Gregory Montoir
+ * Copyright (C) 2007-2008 Gregory Montoir
  */
 
 #include "file.h"
@@ -177,6 +177,8 @@ static ParserToken getNextToken(char **s) {
 		return kParserTokenEnable;
 	} else if (strcmp(_currentTokenStr, "Mix") == 0) {
 		return kParserTokenMix;
+	} else if (strcmp(_currentTokenStr, "ScenenNumber") == 0) { // C1_07.SCN
+		return kParserTokenSceneNumber;
 	} else {
 		return kParserTokenUnknown;
 	}
@@ -307,11 +309,18 @@ static void parseToken_Object(char **s, Game *g) {
 	for (int i = 0; i < g->_sceneObjectsCount; ++i) {
 		if (strcasecmp(g->_sceneObjectsTable[i].name, _currentTokenStr) == 0) {
 			_currentSceneObject = &g->_sceneObjectsTable[i];
+			break;
 		}
 	}
-	if (_currentState == kParserStateObject && _currentSceneObject) {
-		memset(_currentSceneObject->varsTable, 0, sizeof(_currentSceneObject->varsTable));
-		_currentSceneObject->state = 0;
+	if (_currentState == kParserStateObject) {
+		if (_currentSceneObject) {
+			memset(_currentSceneObject->varsTable, 0, sizeof(_currentSceneObject->varsTable));
+			_currentSceneObject->state = 0;
+			// FIXME: fixes _08.SCN TELE05.SCN transition + IARD obj
+			_currentSceneObject->statePrev = 0;
+		} else {
+			warning("Unable to find object '%s'", _currentTokenStr);
+		}
 	}
 }
 
@@ -336,7 +345,7 @@ static void parse_Object(char **s, Game *g) {
 	case kParserTokenMemory:
 		getNextToken_ArrayIndex(s, &var);
 		getNextToken_Int(s, &value);
-		assert(index >= 0 && index < 10);
+		assert(var >= 0 && var < 10);
 		_currentSceneObject->varsTable[var] = value;
 		break;
 	case kParserTokenCoord:
@@ -360,7 +369,7 @@ static void parse_Object(char **s, Game *g) {
 		break;
 	case kParserTokenDepth:
 		getNextToken_Int(s, &value);
-		_currentSceneObject->z = value;
+		_currentSceneObject->zInit = value;
 		break;
 	case kParserTokenMove:
 		getNextToken_Int(s, &value);
@@ -458,37 +467,37 @@ static void parse_SceneCondition(char **s, Game *g) {
 }
 
 static void parse_BoxDescription(char **s, Game *g) {
-	int index, value;
+	int box, value;
 
-	getToken_Int(&index);
-	--index;
+	getToken_Int(&box);
+	--box;
 	// 10 Mix -1 192 64 (582,332) (640,480)
-	Box *box = g->derefBox(index, g->_boxesCountTable[index]);
+	Box *b = g->derefBox(box, g->_boxesCountTable[box]);
 	_currentToken = getNextToken(s);
 	switch (_currentToken) {
 	case kParserTokenDisable:
-		box->state = 0;
+		b->state = 0;
 		break;
 	case kParserTokenEnable:
-		box->state = 1;
+		b->state = 1;
 		break;
 	case kParserTokenMix:
-		box->state = 2;
+		b->state = 2;
 		getNextToken_Int(s, &value);
-		box->z = value;
+		b->z = value;
 		getNextToken_Int(s, &value);
-		box->startColor = value;
+		b->startColor = value;
 		getNextToken_Int(s, &value);
-		box->endColor = value;
-		assert(box->startColor + box->endColor <= 256); // invalid box mix color
+		b->endColor = value;
+		assert(b->startColor + b->endColor <= 256); // invalid box mix color
 		break;
 	default:
 		error("Unexpected token %d state %d", _currentToken, _currentState);
 		break;
 	}
-	getNextToken_Coord(s, &box->x1, &box->y1);
-	getNextToken_Coord(s, &box->x2, &box->y2);
-	++g->_boxesCountTable[index];
+	getNextToken_Coord(s, &b->x1, &b->y1);
+	getNextToken_Coord(s, &b->x2, &b->y2);
+	++g->_boxesCountTable[box];
 }
 
 void Game::parseSCN(const char *fileName) {
@@ -521,12 +530,12 @@ void Game::parseSCN(const char *fileName) {
 		}
 		if (didTest) {
 			if (!compareTest) {
-				// conditional statement failed, skip to next line
+				// condition statement is false, skip to next line
 				stringNextTokenEOL(&s);
 				continue;
 			}
 			if (_currentToken != kParserTokenThen) {
-				error("Unexpected token %d '%s'", _currentToken);
+				error("Unexpected token %d", _currentToken);
 			}
 			_currentToken = getNextToken(&s);
 		}
@@ -538,62 +547,62 @@ void Game::parseSCN(const char *fileName) {
 						clearSceneData(anim - 1);
 					}
 					_currentState = kParserStateDef;
-					break;
-				}
-				if (!loadMovData) {
-					if (anim < _animationsCount && strcasecmp(_animationsTable[anim].name, _currentTokenStr) == 0) {
-						++anim;
-					} else {
-						if (_animationsCount != 0) {
-							clearSceneData(anim - 1);
+				} else {
+					if (!loadMovData) {
+						if (anim < _animationsCount && strcasecmp(_animationsTable[anim].name, _currentTokenStr) == 0) {
+							++anim;
+						} else {
+							if (_animationsCount != 0) {
+								clearSceneData(anim - 1);
+							}
+							_loadDataState = 1;
+							loadMovData = true;
 						}
-						_loadDataState = 1;
-						loadMovData = true;
 					}
-				}
-				if (loadMovData) {
-					loadMOV(_currentTokenStr);
+					if (loadMovData) {
+						loadMOV(_currentTokenStr);
+					}
 				}
 				break;
 			case kParserStateBag:
 				if (_currentToken == kParserTokenBagEnd) {
 					_currentState = kParserStateDef;
-					break;
+				} else {
+					parse_BagObject(&s, this);
 				}
-				parse_BagObject(&s, this);
 				break;
 			case kParserStateScene:
 				if (_currentToken == kParserTokenSceneEnd) {
 					_currentState = kParserStateDef;
-					break;
+				} else {
+					parse_SceneCondition(&s, this);
 				}
-				parse_SceneCondition(&s, this);
 				break;
 			case kParserStateObject:
 				if (_currentToken == kParserTokenObjectEnd) {
 					_currentState = kParserStateDef;
-					break;
+				} else {
+					parse_Object(&s, this);
 				}
-				parse_Object(&s, this);
 				break;
 			case kParserStateNewObject:
 				if (_currentToken == kParserTokenObjectEnd) {
 					_currentState = kParserStateDef;
-					break;
-				}
-				if (_currentSceneObject) {
-					if (_sceneObjectMotionsTable[_currentSceneObject->motionInit].animNum < anim) {
-						_currentSceneObject = 0;
+				} else {
+					if (_currentSceneObject) {
+						if (_sceneObjectMotionsTable[_currentSceneObject->motionInit].animNum < anim) {
+							_currentSceneObject = 0;
+						}
 					}
+					parse_Object(&s, this);
 				}
-				parse_Object(&s, this);
 				break;
 			case kParserStateBox:
 				if (_currentToken == kParserTokenBoxEnd) {
 					_currentState = kParserStateDef;
-					break;
+				} else {
+					parse_BoxDescription(&s, this);
 				}
-				parse_BoxDescription(&s, this);
 				break;
 			}
 		} else {

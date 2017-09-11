@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007 Gregory Montoir
+ * Copyright (C) 2007-2008 Gregory Montoir
  */
 
 #include "decoder.h"
@@ -47,7 +47,7 @@ static uint8 findBestMatchingColor(const uint8 *src, int color) {
 
 void Game::redrawDialogueTexts() {
 	debug(DBG_DIALOGUE, "Game::redrawDialogueTexts()");
-	char *substringOffset[NUM_DIALOG_CHOICES][5];
+	char *substringOffset[NUM_DIALOG_CHOICES][8];
 	for (int i = 0; i < _dialogueChoiceCounter; ++i) {
 		char *lastWord = 0;
 		int lastStringLen = 0;
@@ -57,7 +57,7 @@ void Game::redrawDialogueTexts() {
 			int chr = (uint8)*p;
 			stringLen += _fontCharWidth[chr] + 1;
 			if (stringLen > _dialogueTextRect.w) {
-				assert(substringCount < 5);
+				assert(substringCount < 8);
 				substringOffset[i][substringCount] = lastWord;
 				++substringCount;
 				stringLen -= lastStringLen;
@@ -88,7 +88,9 @@ void Game::redrawDialogueTexts() {
 				x = 0;
 			} else {
 				int chr = (uint8)*p;
-				assert(y + 16 <= _dialogueTextRect.h);
+				if (y + 16 >= _dialogueTextRect.h) {
+					break;
+				}
 				drawChar(textBuffer + (_dialogueTextRect.h - 1 - y) * _dialogueTextRect.w + x, _dialogueTextRect.w, _fontData, chr, choiceColor);
 				x += _fontCharWidth[chr] + 1;
 			}
@@ -138,13 +140,13 @@ void Game::handleDialogue() {
 		if (_stub->_pi.enter) {
 			_stub->_pi.enter = false;
 			if (_dialogueChoiceCounter > 1 && _dialogueChoiceSelected == 0) {
-				win31_sndPlaySound(3, _dialogueChoiceSpeechSoundFile[_dialogueSpeechIndex]);
+				win16_sndPlaySound(3, _dialogueChoiceSpeechSoundFile[_dialogueSpeechIndex]);
 				_dialogueChoiceSelected = 1;
 			} else {
-				win31_sndPlaySound(6);
+				win16_sndPlaySound(6);
 			}
 		}
-		if (_dialogueChoiceSelected != 0 && win31_sndPlaySound(22)) {
+		if (_dialogueChoiceSelected != 0 && win16_sndPlaySound(22)) {
 			_dialogueChoiceSelected = 0;
 			strcpy(_tempTextBuffer, _dialogueChoiceNextId[_dialogueSpeechIndex]);
 			if (_dialogueChoiceGotoFlag[_dialogueSpeechIndex]) {
@@ -168,6 +170,7 @@ void Game::handleDialogue() {
 		redrawDialogueSprite(_dialogueSpriteIndex);
 		if (_dialogueSpriteIndex == 2) {
 			if (_dialogueSpriteCurrentFrameTable[2] == 0) {
+				_dialogueEndedFlag = 1;
 				break;
 			}
 		} else {
@@ -230,7 +233,7 @@ void Game::setupDialog(const char *dialogId) {
 	}
 	// only one choice, play the speech directly
 	if (_dialogueChoiceCounter == 1) {
-		win31_sndPlaySound(3, _dialogueChoiceSpeechSoundFile[_dialogueSpeechIndex]);
+		win16_sndPlaySound(3, _dialogueChoiceSpeechSoundFile[_dialogueSpeechIndex]);
 		_dialogueChoiceSelected = 1;
 	}
 }
@@ -291,20 +294,32 @@ void Game::redrawDialogueSprite(int num) {
 	decodeLzss(_dialogueSpriteDataTable[num][_dialogueSpriteCurrentFrameTable[num]], spriteBitmap);
 	int sprY = getBitmapHeight(_tempDecodeBuffer) - getBitmapHeight(spriteBitmap);
 	int sprX = getBitmapWidth(_tempDecodeBuffer) - getBitmapWidth(spriteBitmap);
-	int frameX;
-	if (num == 0) {
+	int frameX = 0;
+/*	if (num == 0) {
 		frameX = _dialogueBackgroundRect.x + 23;
 		_dialogueTextRect.x = frameX + getBitmapWidth(_tempDecodeBuffer) + 20;
 	} else {
-		frameX = 287 - getBitmapWidth(_tempDecodeBuffer) / 2;
-		frameX -= 23;
+		frameX = (_dialogueBackgroundRect.w - getBitmapWidth(_tempDecodeBuffer)) / 2 - 23;
 		frameX *= (num - 1);
-		frameX = 551 - getBitmapWidth(_tempDecodeBuffer) - frameX;
+		frameX = _dialogueBackgroundRect.w - 23 - getBitmapWidth(_tempDecodeBuffer) - frameX;
 		frameX += _dialogueBackgroundRect.x;
 		_dialogueTextRect.x = _dialogueBackgroundRect.x + 20;
+	}*/
+	switch (num) {
+	case 0:
+		frameX = _dialogueBackgroundRect.x + 13;
+		_dialogueTextRect.x = frameX + getBitmapWidth(_tempDecodeBuffer) + 10;
+		break;
+	case 1:
+		frameX = _dialogueBackgroundRect.x + _dialogueBackgroundRect.w - getBitmapWidth(_tempDecodeBuffer) - 13;
+		_dialogueTextRect.x = _dialogueBackgroundRect.x + 10;
+		break;
+	case 2:
+		frameX = _dialogueBackgroundRect.x + (_dialogueBackgroundRect.w - getBitmapWidth(_tempDecodeBuffer)) / 2;
+		_dialogueTextRect.x = _dialogueBackgroundRect.x;
+		break;
 	}
-
-	_dialogueTextRect.w = _dialogueBackgroundRect.w - 20 - getBitmapWidth(_tempDecodeBuffer) - 23;
+	_dialogueTextRect.w = _dialogueBackgroundRect.w - 10 - getBitmapWidth(_tempDecodeBuffer) - 13;
 
 	int frameY = _dialogueBackgroundRect.y + (_dialogueBackgroundRect.h - getBitmapHeight(_tempDecodeBuffer)) / 2;
 	_dialogueTextRect.y = _dialogueBackgroundRect.y + 10;

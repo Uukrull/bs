@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007 Gregory Montoir
+ * Copyright (C) 2007-2008 Gregory Montoir
  */
 
 #include "file.h"
@@ -24,7 +24,7 @@ struct LockAudioStack {
 	SystemStub *_stub;
 };
 
-static void clipMixerSample(int16 &dst, int sample, int volume) {
+static void mixSample(int16 &dst, int sample, int volume) {
 	int pcm = dst + ((sample * volume) >> 8);
 	if (pcm < -32768) {
 		pcm = -32768;
@@ -58,12 +58,14 @@ struct MixerChannel_Wav : MixerChannel {
 			f->readUint32LE(); // averageBytesPerSec
 			f->readUint16LE(); // blockAlign
 			_bitsPerSample = f->readUint16LE();
-			if (compression != 1 || channels != 1 ||
+			if (compression != 1 ||
+			    (channels != 1 && channels != 2) ||
 			    (sampleRate != 11025 && sampleRate != 22050 && sampleRate != 44100) ||
 			    (_bitsPerSample != 8 && _bitsPerSample != 16)) {
-				warning("Unhandled wav/pcm format c %d ch %d rate %d bits %d", compression, channels, sampleRate, _bitsPerSample);
+				warning("Unhandled wav/pcm format compression %d channels %d rate %d bits %d", compression, channels, sampleRate, _bitsPerSample);
 				return false;
 			}
+			_stereo = (channels == 2);
 			_bufReadStep = (sampleRate << _fracStepBits) / mixerSampleRate;
 			f->read(buf, 4);
 			if (memcmp(buf, "data", 4) == 0) {
@@ -78,27 +80,39 @@ struct MixerChannel_Wav : MixerChannel {
 		return false;
 	}
 
-	virtual int read(int16 *dst, int dstSize) {
-		for (int i = 0; i < dstSize; ++i) {
-			uint16 sample = 0;
-			switch (_bitsPerSample) {
-			case 8:
-				if ((_bufReadOffset >> _fracStepBits) >= _bufSize) { // end of buffer
-					return i;
-				}
-				sample = (_buf[_bufReadOffset >> _fracStepBits] << 8) ^ 0x8000;
-				break;
-			case 16:
-				if ((_bufReadOffset >> _fracStepBits) * 2 >= _bufSize) { // end of buffer
-					return i;
-				}
-				sample = READ_LE_UINT16(&_buf[(_bufReadOffset >> _fracStepBits) * 2]);
-				break;
+	bool readSample(int16 &sample) {
+		switch (_bitsPerSample) {
+		case 8:
+			if ((_bufReadOffset >> _fracStepBits) >= _bufSize) { // end of buffer
+				return false;
 			}
-			_bufReadOffset += _bufReadStep;
-			clipMixerSample(dst[i], (int16)sample, _sfxVolume);
+			sample = (_buf[_bufReadOffset >> _fracStepBits] << 8) ^ 0x8000;
+			break;
+		case 16:
+			if ((_bufReadOffset >> _fracStepBits) * 2 >= _bufSize) { // end of buffer
+				return false;
+			}
+			sample = READ_LE_UINT16(&_buf[(_bufReadOffset >> _fracStepBits) * 2]);
+			break;
 		}
-		return dstSize;
+		_bufReadOffset += _bufReadStep;
+		return true;
+	}
+
+	virtual int read(int16 *dst, int samples) {
+		for (int i = 0; i < samples; ++i) {
+			int16 sampleL, sampleR;
+			if (!readSample(sampleL)) {
+				return i;
+			}
+			sampleR = sampleL;
+			if (_stereo && !readSample(sampleR)) {
+				return i;
+			}
+			mixSample(*dst++, sampleL, _sfxVolume);
+			mixSample(*dst++, sampleR, _sfxVolume);
+		}
+		return samples;
 	}
 
 	uint8 *_buf;
@@ -106,6 +120,7 @@ struct MixerChannel_Wav : MixerChannel {
 	int _bufReadOffset;
 	int _bufReadStep;
 	int _bitsPerSample;
+	bool _stereo;
 };
 
 #ifdef BERMUDA_VORBIS
@@ -158,15 +173,15 @@ struct MixerChannel_Vorbis : MixerChannel {
 		}
 		_open = true;
 		vorbis_info *vi = ov_info(&_ovf, -1);
-		if (vi->channels != 1 || vi->rate != mixerSampleRate) {
+		if (vi->channels != 2 || vi->rate != mixerSampleRate) {
 			warning("Unhandled ogg/pcm format ch %d rate %d", vi->channels, vi->rate);
 			return false;
 		}
 		return true;
 	}
 
-	virtual int read(int16 *dst, int dstSize) {
-		dstSize *= sizeof(int16);
+	virtual int read(int16 *dst, int samples) {
+		int dstSize = samples * sizeof(int16) * 2;
 		if (dstSize > _readBufSize) {
 			_readBufSize = dstSize;
 			free(_readBuf);
@@ -192,7 +207,7 @@ struct MixerChannel_Vorbis : MixerChannel {
 			// mix pcm data
 			for (unsigned int i = 0; i < len / sizeof(int16); ++i) {
 				const int16 sample = (int16)READ_LE_UINT16(&_readBuf[i * 2]);
-				clipMixerSample(dst[readSize + i], sample, _musicVolume);
+				mixSample(dst[readSize + i], sample, _musicVolume);
 			}
 			readSize += len / sizeof(int16);
 			dstSize -= len;
@@ -297,11 +312,12 @@ void Mixer::stopAll() {
 }
 
 void Mixer::mix(int16 *buf, int len) {
+	assert((len & 1) == 0);
 	memset(buf, 0, len * sizeof(int16));
 	for (int i = 0; i < kMaxChannels; ++i) {
 		MixerChannel *mc = _channels[i];
 		if (mc) {
-			if (mc->read(buf, len) <= 0) {
+			if (mc->read(buf, len / 2) <= 0) {
 				delete mc;
 				_channels[i] = 0;
 			}
@@ -310,6 +326,7 @@ void Mixer::mix(int16 *buf, int len) {
 }
 
 void Mixer::mixCallback(void *param, uint8 *buf, int len) {
+	assert((len & 1) == 0);
 	((Mixer *)param)->mix((int16 *)buf, len / 2);
 }
 

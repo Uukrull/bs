@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007 Gregory Montoir
+ * Copyright (C) 2007-2008 Gregory Montoir
  */
 
 #ifndef AVI_PLAYER_H__
@@ -101,22 +101,33 @@ struct Cinepak_Decoder {
 	int _yuvPitch;
 };
 
+struct AVI_SoundBufferQueue {
+	uint8 *buffer;
+	int size;
+	int offset;
+	AVI_SoundBufferQueue *next;
+};
+
 struct AVI_Player {
 	enum {
 		kDefaultFrameWidth = 320,
 		kDefaultFrameHeight = 200,
-		kPreloadSize = 4
+		kSoundPreloadSize = 4
 	};
 
 	AVI_Player(SystemStub *stub);
 	~AVI_Player();
 
 	void play(File *f);
-
 	void readNextFrame();
+	void decodeAudioChunk(AVI_Chunk &c);
+	void decodeVideoChunk(AVI_Chunk &c);
+	void mix(int16 *buf, int samples);
+	static void mixCallback(void *param, uint8 *buf, int len);
 
-	int _inputSampleSize;
 	AVI_Demuxer _demux;
+	AVI_SoundBufferQueue *_soundQueue;
+	int _soundQueuePreloadSize;
 	Cinepak_Decoder _cinepak;
 	SystemStub *_stub;
 };

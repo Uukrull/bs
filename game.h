@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007 Gregory Montoir
+ * Copyright (C) 2007-2008 Gregory Montoir
  */
 
 #ifndef GAME_H__
@@ -122,6 +122,7 @@ struct Script {
 	bool objectFound;
 	int testObjectNum;
 	int nextScene;
+	int statementNum;
 
 	int16 fetchNextWord() {
 		int16 word = READ_LE_UINT16(data + dataOffset);
@@ -182,6 +183,11 @@ enum {
 };
 
 enum {
+	kLeftMouseButton = 1 << 0,
+	kRightMouseButton = 1 << 1
+};
+
+enum {
 	kCycleDelay = 50,
 	kGameScreenWidth = 640,
 	kGameScreenHeight = 480,
@@ -208,6 +214,15 @@ static inline const uint8 *getBitmapData(const uint8 *p) {
 	return p + 4;
 }
 
+static inline bool boxInRect(Box *box, int rect_x1, int rect_x2, int rect_y1, int rect_y2) {
+	assert(box->x1 <= box->x2 && box->y1 <= box->y2);
+	const int xmin = MIN(rect_x1, rect_x2);
+	const int xmax = MAX(rect_x1, rect_x2);
+	const int ymin = MIN(rect_y1, rect_y2);
+	const int ymax = MAX(rect_y1, rect_y2);
+	return box->x1 <= xmax && box->x2 >= xmin && box->y1 <= ymax && box->y2 >= ymin;
+}
+
 struct Mixer;
 struct SystemStub;
 
@@ -231,7 +246,7 @@ struct Game {
 	~Game();
 
 	SceneObject *derefSceneObject(int i) {
-		assert(i >= 0 && i < NUM_SCENE_OBJECTS);
+		assert(i >= 0 && i < _sceneObjectsCount);
 		return &_sceneObjectsTable[i];
 	}
 
@@ -243,6 +258,11 @@ struct Game {
 	SceneObjectStatus *derefSceneObjectStatus(int i) {
 		assert(i >= 0 && i < NUM_SCENE_OBJECT_STATUS);
 		return &_sceneObjectStatusTable[i];
+	}
+
+	SceneObjectFrame *derefSceneObjectFrame(int i) {
+		assert(i >= 0 && i < _sceneObjectFramesCount);
+		return &_sceneObjectFramesTable[i];
 	}
 
 	// bag.cpp
@@ -262,6 +282,7 @@ struct Game {
 	// game.cpp
 	void restart();
 	void mainLoop();
+	void updateMouseButtonsPressed();
 	void updateKeyPressedTable();
 	void setupScreenPalette(const uint8 *src);
 	void clearSceneData(int anim);
@@ -278,7 +299,7 @@ struct Game {
 	void drawObject(int x, int y, const uint8 *src, SceneBitmap *dst);
 	void drawObjectVerticalFlip(int x, int y, const uint8 *src, SceneBitmap *dst);
 	void redrawObjectBoxes(int previousObject, int currentObject);
-	void redrawObjects(bool skipUpdateScreen);
+	void redrawObjects();
 	void playVideo(const char *name);
 	void playBitmapSequenceDemo();
 	void stopMusic();
@@ -291,7 +312,7 @@ struct Game {
 	bool comparePrevObjectTransformYPos(int object, bool fetchCmp = true, int cmpY = -1);
 	bool compareObjectTransformYPos(int object, bool fetchCmp = true, int cmpY = -1);
 	void setupObjectPos(int object, int object2, int useObject2, int useData, int type1, int type2);
-	bool intersectsBox(int box1, int box2, int x1, int y1, int x2, int y2);
+	bool intersectsBox(int num, int index, int x1, int y1, int x2, int y2);
 
 	// opcodes.cpp
 	const GameConditionOpcode *findConditionOpcode(int num) const;
@@ -302,13 +323,7 @@ struct Game {
 	bool cop_isInRandomRange();
 	bool cop_isKeyPressed();
 	bool cop_isKeyNotPressed();
-	bool cop_testMouseXPos();
-	bool cop_testMouseYPos();
 	bool cop_testMouseButtons();
-	bool cop_isMouseOverObject();
-	bool cop_testMousePrevObjectTransformXPos();
-	bool cop_testMousePrevObjectTransformYPos();
-	bool cop_setTestObjectFromClass();
 	bool cop_isObjectInScene();
 	bool cop_testObjectPrevState();
 	bool cop_testObjectState();
@@ -317,8 +332,6 @@ struct Game {
 	bool cop_testObjectTransformXPos();
 	bool cop_testPrevObjectTransformYPos();
 	bool cop_testObjectTransformYPos();
-	bool cop_testObjectPrevZPos();
-	bool cop_testObjectZPos();
 	bool cop_testObjectPrevFlip();
 	bool cop_testObjectFlip();
 	bool cop_testObjectPrevFrameNum();
@@ -328,16 +341,13 @@ struct Game {
 	bool cop_testObjectVar();
 	bool cop_testObjectAndObjectXPos();
 	bool cop_testObjectAndObjectYPos();
-	bool cop_testObjectMotionXPos();
 	bool cop_testObjectMotionYPos();
 	bool cop_testVar();
 	bool cop_isCurrentBagAction();
 	bool cop_isObjectInBox();
 	bool cop_isObjectNotInBox();
-	bool cop_isObjectIntersectingBox();
 	bool cop_isObjectNotIntersectingBox();
 	bool cop_isCurrentBagObject();
-	bool cop_isNotCurrentBagObject();
 	bool cop_isLifeBarDisplayed();
 	bool cop_isLifeBarNotDisplayed();
 	bool cop_testLastDialogue();
@@ -351,21 +361,14 @@ struct Game {
 	void oop_setObjectFlip();
 	void oop_adjustObjectPos_vv0000();
 	void oop_adjustObjectPos_vv1v00();
-	void oop_adjustObjectPos_vv001v();
 	void oop_adjustObjectPos_vv1v1v();
 	void oop_setupObjectPos_121();
-	void oop_setupObjectPos_112();
 	void oop_setupObjectPos_122();
-	void oop_setupObjectPos_132();
 	void oop_setupObjectPos_123();
 	void oop_adjustObjectPos_1v0000();
-	void oop_adjustObjectPos_1v1v00();
-	void oop_adjustObjectPos_1v001v();
 	void oop_adjustObjectPos_1v1v1v();
 	void oop_setupObjectPos_021();
-	void oop_setupObjectPos_012();
 	void oop_setupObjectPos_022();
-	void oop_setupObjectPos_032();
 	void oop_setupObjectPos_023();
 	void oop_evalObjectVar();
 	void oop_translateObjectXPos();
@@ -386,7 +389,7 @@ struct Game {
 	void oop_evalBoxesXPos();
 	void oop_evalBoxesYPos();
 	void oop_setBoxToObject();
-	void oop_extendBoxes();
+	void oop_clipBoxes();
 	void oop_saveObjectStatus();
 	void oop_addObjectToBag();
 	void oop_removeObjectFromBag();
@@ -416,9 +419,9 @@ struct Game {
 	void saveState(int slot);
 	void loadState(int slot, bool switchScene);
 
-	// win31.cpp (temporary helpers)
-	int win31_sndPlaySound(int op, void *data = 0);
-	void win31_stretchBits(SceneBitmap *bits, int srcHeight, int srcWidth, int srcY, int srcX, int dstHeight, int dstWidth, int dstY, int dstX);
+	// win16.cpp (temporary helpers)
+	int win16_sndPlaySound(int op, void *data = 0);
+	void win16_stretchBits(SceneBitmap *bits, int srcHeight, int srcWidth, int srcY, int srcX, int dstHeight, int dstWidth, int dstY, int dstX);
 
 	bool _isDemo;
 	FileSystem _fs;
@@ -490,6 +493,7 @@ struct Game {
 	const char *_scriptDialogSprite1;
 	const char *_scriptDialogSprite2;
 	bool _switchScene;
+	bool _startDialogue;
 	bool _loadState;
 	bool _clearSceneData;
 	bool _gameOver;
@@ -498,12 +502,12 @@ struct Game {
 	int _previousBagAction;
 	int _currentBagObject;
 	int _previousBagObject;
-//	bool _startEndingScene;
-//	bool _skipUpdateScreen;
+	bool _workaroundRaftFlySceneBug;
 	int _currentPlayingSoundPriority;
 	bool _lifeBarDisplayed;
 	bool _lifeBarDisplayed2;
 	uint8 _keysPressed[128];
+	int _mouseButtonsPressed;
 	int _musicTrack; // useless, always equal to 0
 	char _musicName[40];
 	int _sceneNumber;

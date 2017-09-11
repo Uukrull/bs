@@ -1,10 +1,12 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007 Gregory Montoir
+ * Copyright (C) 2007-2008 Gregory Montoir
  */
 
 #include "game.h"
 #include "systemstub.h"
+
+static SystemStub *g_stub;
 
 static const char *USAGE =
 	"Bermuda Syndrome\n"
@@ -24,6 +26,13 @@ static bool parseOption(const char *arg, const char *longCmd, const char **opt) 
 	return handled;
 }
 
+static void exitMain() {
+	if (g_stub) {
+		delete g_stub;
+		g_stub = 0;
+	}
+}
+
 #undef main
 int main(int argc, char *argv[]) {
 	const char *dataPath = "DATA";
@@ -41,11 +50,11 @@ int main(int argc, char *argv[]) {
 			return 0;
 		}
 	}
-	g_debugMask = DBG_INFO; // | DBG_RES | DBG_GAME | DBG_PARSER | DBG_OPCODES | DBG_DIALOGUE;
-	SystemStub *stub = SystemStub_SDL_create();
-	Game *g = new Game(stub, dataPath, savePath, musicPath);
+	g_debugMask = DBG_INFO; // | DBG_GAME | DBG_OPCODES | DBG_DIALOGUE;
+	g_stub = SystemStub_SDL_create();
+	atexit(exitMain);
+	Game *g = new Game(g_stub, dataPath, savePath, musicPath);
 	g->mainLoop();
 	delete g;
-	delete stub;
 	return 0;
 }

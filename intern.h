@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007 Gregory Montoir
+ * Copyright (C) 2007-2008 Gregory Montoir
  */
 
 #ifndef INTERN_H__
@@ -60,6 +60,17 @@ inline T ABS(T t) {
 template<typename T>
 inline void SWAP(T &a, T &b) {
 	T tmp = a; a = b; b = tmp;
+}
+
+template<typename T>
+inline T CLIP(T t, T tmin, T tmax) {
+	if (t < tmin) {
+		return tmin;
+	} else if (t > tmax) {
+		return tmax;
+	} else {
+		return t;
+	}
 }
 
 #endif

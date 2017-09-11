@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007 Gregory Montoir
+ * Copyright (C) 2007-2008 Gregory Montoir
  */
 
 #include <ctime>
@@ -19,9 +19,9 @@ void RandomGenerator::setSeed(uint16 seed) {
 uint16 RandomGenerator::getNumber() {
 	const uint16 randomSeedLo = _randomSeed & 0xFFFF;
 	const uint16 randomSeedHi = _randomSeed >> 16;
-	uint16 rnd = 0x15A * randomSeedLo; 
+	uint16 rnd = 0x15A * randomSeedLo;
 	if (randomSeedHi != 0) {
-		rnd += 0x4E35 * randomSeedHi; 
+		rnd += 0x4E35 * randomSeedHi;
 	}
 	_randomSeed = (rnd << 16) | ((0x4E35 * randomSeedLo) & 0xFFFF);
 	++_randomSeed;

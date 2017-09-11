@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007 Gregory Montoir
+ * Copyright (C) 2007-2008 Gregory Montoir
  */
 
 #ifndef MIXER_H__
@@ -14,7 +14,7 @@ struct SystemStub;
 struct MixerChannel {
 	virtual ~MixerChannel() {}
 	virtual bool load(File *f, int mixerSampleRate) = 0;
-	virtual int read(int16 *dst, int dstSize) = 0;
+	virtual int read(int16 *dst, int samples) = 0;
 	int id;
 };
 

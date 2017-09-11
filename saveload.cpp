@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007 Gregory Montoir
+ * Copyright (C) 2007-2008 Gregory Montoir
  */
 
 #include "file.h"
@@ -70,9 +70,13 @@ static void saveOrLoadInt16(int16 &i) {
 }
 
 static void saveOrLoadStr(char *s, int16 len = -1) {
-	bool storeLen = (len == -1);
+	bool countTermChar = (len == -2); // deal with original buggy file format...
+	bool storeLen = (len < 0);
 	if (storeLen) {
 		len = strlen(s);
+		if (countTermChar) {
+			++len;
+		}
 		saveOrLoadInt16(len);
 	}
 	switch (_saveOrLoadMode) {
@@ -200,7 +204,7 @@ void Game::saveState(int slot) {
 		saveInt16(_defaultVarsTable[i]);
 	}
 	assert(strchr(_currentSceneScn, '\\') == 0);
-	saveOrLoadStr(_currentSceneScn);
+	saveOrLoadStr(_currentSceneScn, -2);
 	saveInt16(_sceneObjectsCount);
 	for (int i = 0; i < _sceneObjectsCount; ++i) {
 		saveOrLoad_sceneObject(_sceneObjectsTable[i]);
@@ -229,7 +233,7 @@ void Game::saveState(int slot) {
 	save_bagObjects(_bagObjectsTable, _bagObjectsCount);
 	saveInt16(_currentBagAction);
 	saveInt32(_musicTrack);
-	saveInt32(_musicTrack); // original saved it twice apparently... weird
+	saveInt32(_musicTrack); // original saved it twice...
 	saveOrLoadStr(_musicName);
 	debug(DBG_INFO, "Saved state to slot %d", slot);
 }
@@ -251,7 +255,7 @@ void Game::loadState(int slot, bool switchScene) {
 	for (int i = 0; i < n; ++i) {
 		_varsTable[i] = loadInt16();
 	}
-	saveOrLoadStr(_tempTextBuffer);
+	saveOrLoadStr(_tempTextBuffer, -2);
 	if (switchScene) {
 		_switchScene = true;
 		return;

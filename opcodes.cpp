@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007 Gregory Montoir
+ * Copyright (C) 2007-2008 Gregory Montoir
  */
 
 #include "game.h"
@@ -58,8 +58,8 @@ bool Game::testExpr(int16 val) {
 	bool ret = false;
 	int16 op = _objectScript.fetchNextWord();
 	if (op == -1) {
-		int16 n = _objectScript.fetchNextWord();
-		for (int16 i = 0; i < n; ++i) {
+		int count = _objectScript.fetchNextWord();
+		while (count--) {
 			int16 cmp1 = _objectScript.fetchNextWord();
 			int16 cmp2 = _objectScript.fetchNextWord();
 			assert(cmp1 <= cmp2);
@@ -132,6 +132,7 @@ bool Game::cop_isKeyNotPressed() {
 	return _keysPressed[key] == 0;
 }
 
+#if 0
 bool Game::cop_testMouseXPos() {
 	debug(DBG_OPCODES, "Game::cop_testMouseXPos");
 	return testExpr(_stub->_pi.mouseX);
@@ -141,6 +142,7 @@ bool Game::cop_testMouseYPos() {
 	debug(DBG_OPCODES, "Game::cop_testMouseYPos");
 	return testExpr(_stub->_pi.mouseY);
 }
+#endif
 
 bool Game::cop_testMouseButtons() {
 	debug(DBG_OPCODES, "Game::cop_testMouseButtons");
@@ -148,105 +150,19 @@ bool Game::cop_testMouseButtons() {
 	int t = _objectScript.fetchNextWord();
 	switch (t) {
 	case 0:
-		ret = _stub->_pi.leftMouseButton;
+		ret = (_mouseButtonsPressed & kLeftMouseButton) != 0;
 		break;
 	case 1:
-		ret = _stub->_pi.rightMouseButton;
+		ret = (_mouseButtonsPressed & kRightMouseButton) != 0;
 		break;
 	case 2:
-		ret = !_stub->_pi.leftMouseButton;
+		ret = (_mouseButtonsPressed & kLeftMouseButton) == 0;
 		break;
 	case 3:
-		ret = !_stub->_pi.rightMouseButton;
+		ret = (_mouseButtonsPressed & kRightMouseButton) == 0;
 		break;
 	}
 	return ret;
-}
-
-bool Game::cop_isMouseOverObject() {
-	debug(DBG_OPCODES, "Game::cop_isMouseOverObject");
-	bool ret = true;
-	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
-	if (index == -1) {
-		ret = false;
-	}
-	if (ret) {
-		SceneObject *so = derefSceneObject(index);
-		if (so->statePrev != 0) {
-			SceneObjectFrame *sof = &_sceneObjectFramesTable[so->frameNumPrev];
-			if (so->xPrev <= _stub->_pi.mouseX && so->xPrev + sof->hdr.w >= _stub->_pi.mouseX) {
-				if (so->yPrev <= _stub->_pi.mouseY && so->yPrev + sof->hdr.h >= _stub->_pi.mouseY) {
-					return true;
-				}
-			}
-		}
-		if (index == _objectScript.testObjectNum) {
-			_objectScript.dataOffset = _objectScript.testDataOffset;
-			assert(0); // XXX
-		} else {
-			ret = false;
-		}
-	}
-	return ret;
-}
-
-bool Game::cop_testMousePrevObjectTransformXPos() {
-	debug(DBG_OPCODES, "Game::cop_testMousePrevObjectTransformXPos");
-	bool ret = true;
-	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
-	if (index == -1) {
-		ret = false;
-	}
-	if (ret) {
-		if (comparePrevObjectTransformXPos(index, false, _stub->_pi.mouseX)) {
-			return true;
-		}
-		if (index == _objectScript.testObjectNum) {
-			_objectScript.dataOffset = _objectScript.testDataOffset;
-			assert(0); // XXX
-		} else {
-			ret = false;
-		}
-	}
-	return true;
-}
-
-bool Game::cop_testMousePrevObjectTransformYPos() {
-	debug(DBG_OPCODES, "Game::cop_testMousePrevObjectTransformYPos");
-	bool ret = true;
-	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
-	if (index == -1) {
-		ret = false;
-	}
-	if (ret) {
-		if (comparePrevObjectTransformYPos(index, false, _stub->_pi.mouseY)) {
-			return true;
-		}
-		if (index == _objectScript.testObjectNum) {
-			_objectScript.dataOffset = _objectScript.testDataOffset;
-			assert(0); // XXX
-		} else {
-			ret = false;
-		}
-	}
-	return true;
-}
-
-bool Game::cop_setTestObjectFromClass() {
-	debug(DBG_OPCODES, "Game::cop_setTestObjectFromClass");
-	int endOfDataOffset = _objectScript.dataOffset - 2;
-	const char *objectClass = _objectScript.fetchNextString();
-	for (int i = _objectScript.testObjectNum + 1; i < _sceneObjectsCount; ++i) {
-		if (strcmp(_sceneObjectsTable[i].className, objectClass) == 0) {
-			_objectScript.testObjectNum = i;
-			break;
-		}
-	}
-	if (_objectScript.testObjectNum == -1) {
-		return false;
-	}
-	_objectScript.testDataOffset = endOfDataOffset;
-	return true;
 }
 
 bool Game::cop_isObjectInScene() {
@@ -256,12 +172,14 @@ bool Game::cop_isObjectInScene() {
 	if (index == -1) {
 		ret = false;
 	}
-	if (index != _objectScript.currentObjectNum) {
-		if (index == _objectScript.testObjectNum) {
-			_objectScript.dataOffset = _objectScript.testDataOffset;
-			assert(0); // XXX
-		} else {
-			ret = false;
+	if (ret) { // FIXME: not present in the original disassembly
+		if (index != _objectScript.currentObjectNum) {
+			if (index == _objectScript.testObjectNum) {
+				_objectScript.dataOffset = _objectScript.testDataOffset;
+				assert(0); // XXX
+			} else {
+				ret = false;
+			}
 		}
 	}
 	return ret;
@@ -285,6 +203,8 @@ bool Game::cop_testObjectPrevState() {
 				ret = false;
 			}
 		}
+	} else {
+		_objectScript.dataOffset += 2;
 	}
 	return ret;
 }
@@ -307,6 +227,8 @@ bool Game::cop_testObjectState() {
 				ret = false;
 			}
 		}
+	} else {
+		_objectScript.dataOffset += 2;
 	}
 	return ret;
 }
@@ -434,48 +356,6 @@ bool Game::cop_testObjectTransformYPos() {
 	return ret;
 }
 
-bool Game::cop_testObjectPrevZPos() {
-	debug(DBG_OPCODES, "Game::cop_testObjectPrevZPos");
-	bool ret = true;
-	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
-	if (index == -1) {
-		ret = false;
-	}
-	if (ret) {
-		if (testExpr(derefSceneObject(index)->zPrev)) {
-			return true;
-		}
-		if (index == _objectScript.testObjectNum) {
-			_objectScript.dataOffset = _objectScript.testDataOffset;
-			assert(0); // XXX
-		} else {
-			ret = false;
-		}
-	}
-	return ret;
-}
-
-bool Game::cop_testObjectZPos() {
-	debug(DBG_OPCODES, "Game::cop_testObjectZPos");
-	bool ret = true;
-	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
-	if (index == -1) {
-		ret = false;
-	}
-	if (ret) {
-		if (testExpr(derefSceneObject(index)->z)) {
-			return true;
-		}
-		if (index == _objectScript.testObjectNum) {
-			_objectScript.dataOffset = _objectScript.testDataOffset;
-			assert(0); // XXX
-		} else {
-			ret = false;
-		}
-	}
-	return ret;
-}
-
 bool Game::cop_testObjectPrevFlip() {
 	debug(DBG_OPCODES, "Game::cop_testObjectPrevFlip");
 	bool ret = true;
@@ -485,7 +365,7 @@ bool Game::cop_testObjectPrevFlip() {
 	}
 	if (ret) {
 		SceneObject *so = derefSceneObject(index);
-		int flip = _objectScript.fetchNextWord();
+		int16 flip = _objectScript.fetchNextWord();
 		if (flip != so->flipPrev) {
 			if (index == _objectScript.testObjectNum) {
 				_objectScript.dataOffset = _objectScript.testDataOffset;
@@ -509,7 +389,7 @@ bool Game::cop_testObjectFlip() {
 	}
 	if (ret) {
 		SceneObject *so = derefSceneObject(index);
-		int flip = _objectScript.fetchNextWord();
+		int16 flip = _objectScript.fetchNextWord();
 		if (flip != so->flip) {
 			if (index == _objectScript.testObjectNum) {
 				_objectScript.dataOffset = _objectScript.testDataOffset;
@@ -646,15 +526,16 @@ bool Game::cop_testObjectVar() {
 	}
 	if (ret) {
 		SceneObject *so = derefSceneObject(index);
-		if (testExpr(so->varsTable[var])) {
-			return true;
+		assert(var >= 0 && var < 10);
+		if (!testExpr(so->varsTable[var])) {
+			if (index == _objectScript.testObjectNum) {
+				_objectScript.dataOffset = _objectScript.testDataOffset;
+				assert(0); // XXX
+			} else {
+				ret = false;
+			}
 		}
-		if (index == _objectScript.testObjectNum) {
-			_objectScript.dataOffset = _objectScript.testDataOffset;
-			assert(0); // XXX
-		} else {
-			ret = false;
-		}
+//_logExpr = false;
 	}
 	return ret;
 }
@@ -672,6 +553,7 @@ bool Game::cop_testObjectAndObjectXPos() {
 				so = derefSceneObject(var18);
 				if (so->statePrev == 0) {
 					if (var18 == _objectScript.testObjectNum) {
+						assert(0);
 						_objectScript.dataOffset = _objectScript.testDataOffset;
 						return true;
 					}
@@ -689,6 +571,7 @@ bool Game::cop_testObjectAndObjectXPos() {
 					}
 				}
 				if (index == _objectScript.testObjectNum || var18 == _objectScript.testObjectNum) {
+					assert(0);
 					_objectScript.dataOffset = _objectScript.testDataOffset;
 					return true;
 				}
@@ -696,6 +579,7 @@ bool Game::cop_testObjectAndObjectXPos() {
 			return false;
 		}
 		if (index == _objectScript.testObjectNum) {
+			assert(0);
 			_objectScript.dataOffset = _objectScript.testDataOffset;
 			return true;
 		}
@@ -716,6 +600,7 @@ bool Game::cop_testObjectAndObjectYPos() {
 				so = derefSceneObject(var18);
 				if (so->statePrev == 0) {
 					if (var18 == _objectScript.testObjectNum) {
+						assert(0);
 						_objectScript.dataOffset = _objectScript.testDataOffset;
 						return true;
 					}
@@ -733,6 +618,7 @@ bool Game::cop_testObjectAndObjectYPos() {
 					}
 				}
 				if (index == _objectScript.testObjectNum || var18 == _objectScript.testObjectNum) {
+					assert(0);
 					_objectScript.dataOffset = _objectScript.testDataOffset;
 					return true;
 				}
@@ -740,52 +626,10 @@ bool Game::cop_testObjectAndObjectYPos() {
 			return false;
 		}
 		if (index == _objectScript.testObjectNum) {
+			assert(0);
 			_objectScript.dataOffset = _objectScript.testDataOffset;
 			return true;
 		}
-	}
-	return false;
-}
-
-bool Game::cop_testObjectMotionXPos() {
-	debug(DBG_OPCODES, "Game::cop_testObjectMotionXPos()");
-	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
-	if (index != -1) {
-		SceneObject *so = derefSceneObject(index);
-		int num = so->motionNum + so->motionInit;
-		int16 var1A = _sceneObjectMotionsTable[num].firstFrameIndex + so->motionFrameNum;
-		int _ax, _dx;
-		if (so->flipPrev == 2) {
-			_ax = _sceneObjectFramesTable[var1A].hdr.xPos;
-			_ax -= _sceneObjectFramesTable[so->frameNumPrev].hdr.xPos;
-			_ax += _sceneObjectFramesTable[var1A].hdr.w;
-			_ax -= _sceneObjectFramesTable[so->frameNumPrev].hdr.w;
-			_ax += 6;
-		} else {
-			_ax = _sceneObjectFramesTable[so->frameNumPrev].hdr.xPos;
-			_ax -= _sceneObjectFramesTable[var1A].hdr.xPos;
-		}
-		if (so->flipInit == 2) {
-			_dx = 1 - _sceneObjectFramesTable[var1A].hdr.w - 6;
-		} else {
-			_dx = 0;
-		}
-		_ax = so->xPrev - so->xInit - _dx - _ax;
-		int16 div = _objectScript.fetchNextWord();
-		var1A = _ax % div;
-		if (var1A < 0) {
-			var1A += div;
-		}
-		int16 cmp = _objectScript.fetchNextWord();
-		if (var1A == cmp && so->state == 1) {
-			return true;
-		}
-		if (index == _objectScript.testObjectNum) {
-			_objectScript.dataOffset = _objectScript.testDataOffset;
-			return true;
-		}
-	} else {
-		_objectScript.dataOffset += 4;
 	}
 	return false;
 }
@@ -810,6 +654,7 @@ bool Game::cop_testObjectMotionYPos() {
 			return true;
 		}
 		if (index == _objectScript.testObjectNum) {
+			assert(0);
 			_objectScript.dataOffset = _objectScript.testDataOffset;
 			return true;
 		}
@@ -843,26 +688,14 @@ bool Game::cop_isObjectInBox() {
 	if (ret) {
 		SceneObject *so = derefSceneObject(index);
 		if (so->statePrev != 0) {
-			int16 var1E = getObjectTransformXPos(index);
-			int16 var20 = getObjectTransformXPos(index);
-			int16 var22 = getObjectTransformYPos(index);
-			int16 var24 = getObjectTransformYPos(index);
+			int16 var1E = getObjectTransformXPos(index); // x1
+			int16 var20 = getObjectTransformXPos(index); // x2
+			int16 var22 = getObjectTransformYPos(index); // y1
+			int16 var24 = getObjectTransformYPos(index); // y2
 			bool foundBox = false;
 			for (int i = 0; i < _boxesCountTable[var1A]; ++i) {
 				Box *box = derefBox(var1A, i);
-				if (box->x1 > MAX(var1E, var20)) {
-					continue;
-				}
-				if (box->x2 < MIN(var1E, var20)) {
-					continue;
-				}
-				if (box->y1 > MAX(var22, var24)) {
-					continue;
-				}
-				if (box->y2 < MIN(var22, var24)) {
-					continue;
-				}
-				if (box->state == 1) {
+				if (boxInRect(box, var1E, var20, var22, var24) && box->state == 1) {
 					foundBox = true;
 					break;
 				}
@@ -873,19 +706,7 @@ bool Game::cop_isObjectInBox() {
 			foundBox = false;
 			for (int i = 0; i < _boxesCountTable[10 + var1A]; ++i) {
 				Box *box = derefBox(10 + var1A, i);
-				if (box->x1 > MAX(var1E, var20)) {
-					continue;
-				}
-				if (box->x2 < MIN(var1E, var20)) {
-					continue;
-				}
-				if (box->y1 > MAX(var22, var24)) {
-					continue;
-				}
-				if (box->y2 < MIN(var22, var24)) {
-					continue;
-				}
-				if (box->state == 1) {
+				if (boxInRect(box, var1E, var20, var22, var24) && box->state == 1) {
 					foundBox = true;
 					break;
 				}
@@ -922,19 +743,7 @@ bool Game::cop_isObjectNotInBox() {
 			bool foundBox = false;
 			for (int i = 0; i < _boxesCountTable[var1A]; ++i) {
 				Box *box = derefBox(var1A, i);
-				if (box->x1 > MAX(var1E, var20)) {
-					continue;
-				}
-				if (box->x2 < MIN(var1E, var20)) {
-					continue;
-				}
-				if (box->y1 > MAX(var22, var24)) {
-					continue;
-				}
-				if (box->y2 < MIN(var22, var24)) {
-					continue;
-				}
-				if (box->state == 1) {
+				if (boxInRect(box, var1E, var20, var22, var24) && box->state == 1) {
 					foundBox = true;
 					break;
 				}
@@ -951,19 +760,7 @@ bool Game::cop_isObjectNotInBox() {
 			foundBox = false;
 			for (int i = 0; i < _boxesCountTable[10 + var1A]; ++i) {
 				Box *box = derefBox(10 + var1A, i);
-				if (box->x1 > MAX(var1E, var20)) {
-					continue;
-				}
-				if (box->x2 < MIN(var1E, var20)) {
-					continue;
-				}
-				if (box->y1 > MAX(var22, var24)) {
-					continue;
-				}
-				if (box->y2 < MIN(var22, var24)) {
-					continue;
-				}
-				if (box->state == 1) {
+				if (boxInRect(box, var1E, var20, var22, var24) && box->state == 1) {
 					foundBox = true;
 					break;
 				}
@@ -981,64 +778,6 @@ bool Game::cop_isObjectNotInBox() {
 		}
 	}
 	if (index == _objectScript.testObjectNum) {
-		_objectScript.dataOffset = _objectScript.testDataOffset;
-		assert(0); // XXX
-	} else {
-		ret = false;
-	}
-	return ret;
-}
-
-bool Game::cop_isObjectIntersectingBox() {
-	debug(DBG_OPCODES, "Game::cop_isObjectIntersectingBox()");
-	bool ret = true;
-	int16 var1A = _objectScript.fetchNextWord();
-	int var18 = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
-	if (var18 == -1) {
-		ret = false;
-	}
-	if (ret) {
-		SceneObject *so = derefSceneObject(var18);
-		if (so->statePrev != 0) {
-			int16 var1E = getObjectTransformXPos(var18);
-			int16 var22 = getObjectTransformYPos(var18);
-			var18 = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
-			if (var18 == -1) {
-				ret = false;
-			}
-			if (ret) {
-				so = derefSceneObject(var18);
-				if (so->statePrev != 0) {
-					int16 var20 = getObjectTransformXPos(var18);
-					int16 var24 = getObjectTransformYPos(var18);
-
-					bool foundBox = false;
-					for (int i = 0; i < _boxesCountTable[var1A]; ++i) {
-						if (intersectsBox(var1A, i, var1E, var22, var20, var24)) {
-							foundBox = true;
-							break;
-						}
-					}
-					if (foundBox) {
-						return true;
-					}
-
-					foundBox = false;
-					for (int i = 0; i < _boxesCountTable[10 + var1A]; ++i) {
-						if (intersectsBox(10 + var1A, i, var1E, var22, var20, var24)) {
-							foundBox = true;
-							break;
-						}
-					}
-					if (foundBox) {
-						return true;
-					}
-
-				}
-			}
-		}
-	}
-	if (var18 == _objectScript.testObjectNum) {
 		_objectScript.dataOffset = _objectScript.testDataOffset;
 		assert(0); // XXX
 	} else {
@@ -1072,6 +811,7 @@ bool Game::cop_isObjectNotIntersectingBox() {
 					if (foundBox) {
 						if (var18 == _objectScript.testObjectNum) {
 							_objectScript.dataOffset = _objectScript.testDataOffset;
+							assert(0); // XXX
 							return true;
 						}
 						return false;
@@ -1086,6 +826,7 @@ bool Game::cop_isObjectNotIntersectingBox() {
 					if (foundBox) {
 						if (var18 == _objectScript.testObjectNum) {
 							_objectScript.dataOffset = _objectScript.testDataOffset;
+							assert(0); // XXX
 							return true;
 						}
 						return false;
@@ -1097,6 +838,7 @@ bool Game::cop_isObjectNotIntersectingBox() {
 	}
 	if (var18 == _objectScript.testObjectNum) {
 		_objectScript.dataOffset = _objectScript.testDataOffset;
+		assert(0); // XXX
 		return true;
 	}
 	return false;
@@ -1107,13 +849,6 @@ bool Game::cop_isCurrentBagObject() {
 	const char *name = _objectScript.fetchNextString();
 	int index = findBagObjectByName(name);
 	return index != -1 && _currentBagObject == index;
-}
-
-bool Game::cop_isNotCurrentBagObject() {
-	debug(DBG_OPCODES, "Game::cop_isNotCurrentBagObject");
-	const char *name = _objectScript.fetchNextString();
-	int index = findBagObjectByName(name);
-	return index != -1 && _currentBagObject != index;
 }
 
 bool Game::cop_isLifeBarDisplayed() {
@@ -1154,7 +889,7 @@ void Game::oop_initializeObject() {
 				so->y = so->yPrev;
 				so->frameNum = so->frameNumPrev;
 				if (so->state == 2) {
-					SceneObjectFrame *sof = &_sceneObjectFramesTable[so->frameNum];
+					SceneObjectFrame *sof = derefSceneObjectFrame(so->frameNum);
 					copyBufferToBuffer(so->x, _bitmapBuffer1.h + 1 - so->y - sof->hdr.h, sof->hdr.w, sof->hdr.h, &_bitmapBuffer3, &_bitmapBuffer1);
 				}
 				so->state = -1;
@@ -1192,9 +927,7 @@ void Game::oop_evalCurrentObjectX() {
 		_objectScript.dataOffset += 6;
 		evalExpr(&so->x);
 	} else {
-		assert(0);
-		// XXX need to skip data in this case ? original doesn't
-		// _objectScript.dataOffset += 6 + 4;
+		_objectScript.dataOffset += 6 + 4;
 	}
 }
 
@@ -1205,9 +938,7 @@ void Game::oop_evalCurrentObjectY() {
 		_objectScript.dataOffset += 6;
 		evalExpr(&so->y);
 	} else {
-		assert(0);
-		// XXX need to skip data in this case ? original doesn't
-		// _objectScript.dataOffset += 6 + 4;
+		_objectScript.dataOffset += 6 + 4;
 	}
 }
 
@@ -1281,20 +1012,6 @@ void Game::oop_adjustObjectPos_vv1v00() {
 	}
 }
 
-void Game::oop_adjustObjectPos_vv001v() {
-	debug(DBG_OPCODES, "Game::oop_adjustObjectPos_vv001v()");
-	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
-	if (index != -1) {
-		int16 a0 = _objectScript.fetchNextWord();
-		int16 a2 = _objectScript.fetchNextWord();
-		_objectScript.fetchNextWord();
-		int16 a6 = _objectScript.fetchNextWord();
-		changeObjectMotionFrame(_objectScript.currentObjectNum, index, _objectScript.objectFound, a2, a0, 0, 0, 1, a6);
-	} else {
-		_objectScript.dataOffset += 8;
-	}
-}
-
 void Game::oop_adjustObjectPos_vv1v1v() {
 	debug(DBG_OPCODES, "Game::oop_adjustObjectPos_vv1v1v()");
 	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
@@ -1319,16 +1036,6 @@ void Game::oop_setupObjectPos_121() {
 	}
 }
 
-void Game::oop_setupObjectPos_112() {
-	debug(DBG_OPCODES, "Game::oop_setupObjectPos_112()");
-	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
-	if (index != -1) {
-		setupObjectPos(_objectScript.currentObjectNum, index, _objectScript.objectFound, 1, 1, 2);
-	} else {
-		_objectScript.dataOffset += 16;
-	}
-}
-
 void Game::oop_setupObjectPos_122() {
 	debug(DBG_OPCODES, "Game::oop_setupObjectPos_122()");
 	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
@@ -1336,16 +1043,6 @@ void Game::oop_setupObjectPos_122() {
 		setupObjectPos(_objectScript.currentObjectNum, index, _objectScript.objectFound, 1, 2, 2);
 	} else {
 		_objectScript.dataOffset += 28;
-	}
-}
-
-void Game::oop_setupObjectPos_132() {
-	debug(DBG_OPCODES, "Game::oop_setupObjectPos_132()");
-	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
-	if (index != -1) {
-		setupObjectPos(_objectScript.currentObjectNum, index, _objectScript.objectFound, 1, 3, 2);
-	} else {
-		_objectScript.dataOffset += 20;
 	}
 }
 
@@ -1367,32 +1064,6 @@ void Game::oop_adjustObjectPos_1v0000() {
 		changeObjectMotionFrame(_objectScript.currentObjectNum, index, _objectScript.objectFound, 1, a0, 0, 0, 0, 0);
 	} else {
 		_objectScript.dataOffset += 2;
-	}
-}
-
-void Game::oop_adjustObjectPos_1v1v00() {
-	debug(DBG_OPCODES, "Game::oop_adjustObjectPos_1v1v00()");
-	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
-	if (index != -1) {
-		int16 a0 = _objectScript.fetchNextWord();
-		int16 a2 = _objectScript.fetchNextWord();
-		_objectScript.fetchNextWord();
-		changeObjectMotionFrame(_objectScript.currentObjectNum, index, _objectScript.objectFound, 1, a0, 1, a2, 0, 0);
-	} else {
-		_objectScript.dataOffset += 6;
-	}
-}
-
-void Game::oop_adjustObjectPos_1v001v() {
-	debug(DBG_OPCODES, "Game::oop_adjustObjectPos_1v001v()");
-	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
-	if (index != -1) {
-		int16 a0 = _objectScript.fetchNextWord();
-		_objectScript.fetchNextWord();
-		int16 a4 = _objectScript.fetchNextWord();
-		changeObjectMotionFrame(_objectScript.currentObjectNum, index, _objectScript.objectFound, 1, a0, 0, 0, 1, a4);
-	} else {
-		_objectScript.dataOffset += 6;
 	}
 }
 
@@ -1419,16 +1090,6 @@ void Game::oop_setupObjectPos_021() {
 	}
 }
 
-void Game::oop_setupObjectPos_012() {
-	debug(DBG_OPCODES, "Game::oop_setupObjectPos_012()");
-	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
-	if (index != -1) {
-		setupObjectPos(_objectScript.currentObjectNum, index, _objectScript.objectFound, 0, 1, 2);
-	} else {
-		_objectScript.dataOffset += 14;
-	}
-}
-
 void Game::oop_setupObjectPos_022() {
 	debug(DBG_OPCODES, "Game::oop_setupObjectPos_022()");
 	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
@@ -1436,16 +1097,6 @@ void Game::oop_setupObjectPos_022() {
 		setupObjectPos(_objectScript.currentObjectNum, index, _objectScript.objectFound, 0, 2, 2);
 	} else {
 		_objectScript.dataOffset += 26;
-	}
-}
-
-void Game::oop_setupObjectPos_032() {
-	debug(DBG_OPCODES, "Game::oop_setupObjectPos_032()");
-	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
-	if (index != -1) {
-		setupObjectPos(_objectScript.currentObjectNum, index, _objectScript.objectFound, 0, 3, 2);
-	} else {
-		_objectScript.dataOffset += 18;
 	}
 }
 
@@ -1464,6 +1115,7 @@ void Game::oop_evalObjectVar() {
 	int var = _objectScript.fetchNextWord();
 	int index = findObjectByName(_objectScript.currentObjectNum, _objectScript.testObjectNum, &_objectScript.objectFound);
 	if (index != -1) {
+		assert(var >= 0 && var < 10);
 		SceneObject *so = derefSceneObject(index);
 		evalExpr(&so->varsTable[var]);
 	} else {
@@ -1604,7 +1256,7 @@ void Game::oop_setObjectCel() {
 		so->motionNum = _objectScript.fetchNextWord() - 1;
 		so->motionFrameNum = _objectScript.fetchNextWord() - 1;
 	} else {
-		_objectScript.dataOffset += 2;
+		_objectScript.dataOffset += 4;
 	}
 }
 
@@ -1623,12 +1275,14 @@ void Game::oop_resetObjectCel() {
 void Game::oop_evalVar() {
 	debug(DBG_OPCODES, "Game::oop_evalVar()");
 	int var = _objectScript.fetchNextWord();
+	assert(var >= 0 && var < NUM_VARS);
 	evalExpr(&_varsTable[var]);
 }
 
 void Game::oop_getSceneNumberInVar() {
 	debug(DBG_OPCODES, "Game::oop_getSceneNumberInVar()");
 	int var = _objectScript.fetchNextWord();
+	assert(var >= 0 && var < NUM_VARS);
 	_varsTable[var] = _sceneNumber;
 }
 
@@ -1636,6 +1290,10 @@ void Game::oop_disableBox() {
 	debug(DBG_OPCODES, "Game::oop_disableBox()");
 	int box = _objectScript.fetchNextWord();
 	int index = _objectScript.fetchNextWord();
+	// FIXME: workaround no box for using raft (C2_17.SCN, FLY*.SCN)
+	if (_objectScript.currentObjectNum == 0 && (_objectScript.statementNum == 38 || _objectScript.statementNum == 39)) {
+		return;
+	}
 	derefBox(box, index)->state = 0;
 }
 
@@ -1697,39 +1355,19 @@ void Game::oop_setBoxToObject() {
 	_objectScript.dataOffset += 24;
 }
 
-void Game::oop_extendBoxes() {
-	debug(DBG_OPCODES, "Game::oop_extendBoxes()");
-	int16 var1E = _objectScript.fetchNextWord();
-	int16 var22 = _objectScript.fetchNextWord();
-	int16 var20 = _objectScript.fetchNextWord();
-	int16 var24 = _objectScript.fetchNextWord();
+void Game::oop_clipBoxes() {
+	debug(DBG_OPCODES, "Game::oop_clipBoxes()");
+	int16 x1 = _objectScript.fetchNextWord();
+	int16 y1 = _objectScript.fetchNextWord();
+	int16 x2 = _objectScript.fetchNextWord();
+	int16 y2 = _objectScript.fetchNextWord();
 	for (int b = 0; b < 10; ++b) {
 		for (int i = 0; i < _boxesCountTable[b]; ++i) {
 			Box *box = derefBox(b, i);
-			if (box->x1 < var1E) {
-				box->x1 = var1E;
-			}
-			if (box->x1 > var20) {
-				box->x1 = var20;
-			}
-			if (box->x2 < var1E) {
-				box->x2 = var1E;
-			}
-			if (box->x2 > var20) {
-				box->x2 = var20;
-			}
-			if (box->y1 < var22) {
-				box->y1 = var22;
-			}
-			if (box->y1 > var24) {
-				box->y1 = var24;
-			}
-			if (box->y2 < var22) {
-				box->y2 = var22;
-			}
-			if (box->y2 > var24) {
-				box->y2 = var24;
-			}
+			box->x1 = CLIP(box->x1, x1, x2);
+			box->x2 = CLIP(box->x2, x1, x2);
+			box->y1 = CLIP(box->y1, y1, y2);
+			box->y2 = CLIP(box->y2, y1, y2);
 		}
 	}
 }
@@ -1744,7 +1382,7 @@ void Game::oop_saveObjectStatus() {
 		xPrev = so->xPrev;
 	}
 	int index = _objectScript.fetchNextWord();
-	SceneObjectStatus *stat = &_sceneObjectStatusTable[index];
+	SceneObjectStatus *stat = derefSceneObjectStatus(index);
 	stat->x = xPrev;
 	stat->y = so->yPrev;
 	stat->z = so->zPrev;
@@ -1809,14 +1447,14 @@ void Game::oop_playSoundLowerEqualPriority() {
 	int num = _objectScript.fetchNextWord();
 	int priority = _objectScript.fetchNextWord();
 	if (priority > _currentPlayingSoundPriority) {
-		if (win31_sndPlaySound(22) == 0) {
+		if (win16_sndPlaySound(22) == 0) {
 			return;
 		}
 	}
 	SceneObject *so = derefSceneObject(_objectScript.currentObjectNum);
 	num += _animationsTable[_sceneObjectMotionsTable[so->motionNum1].animNum].firstSoundBufferIndex - 1;
 	assert(num >= 0 && num < _soundBuffersCount);
-	win31_sndPlaySound(3, _soundBuffersTable[num].filename); // win31_sndPlaySound(7, _soundBuffersTable[num].buffer);
+	win16_sndPlaySound(3, _soundBuffersTable[num].filename); // win16_sndPlaySound(7, _soundBuffersTable[num].buffer);
 	_currentPlayingSoundPriority = priority;
 }
 
@@ -1825,14 +1463,14 @@ void Game::oop_playSoundLowerPriority() {
 	int num = _objectScript.fetchNextWord();
 	int priority = _objectScript.fetchNextWord();
 	if (priority >= _currentPlayingSoundPriority) {
-		if (win31_sndPlaySound(22) == 0) {
+		if (win16_sndPlaySound(22) == 0) {
 			return;
 		}
 	}
 	SceneObject *so = derefSceneObject(_objectScript.currentObjectNum);
 	num += _animationsTable[_sceneObjectMotionsTable[so->motionNum1].animNum].firstSoundBufferIndex - 1;
 	assert(num >= 0 && num < _soundBuffersCount);
-	win31_sndPlaySound(3, _soundBuffersTable[num].filename); // win31_sndPlaySound(7, _soundBuffersTable[num].buffer);
+	win16_sndPlaySound(3, _soundBuffersTable[num].filename); // win16_sndPlaySound(7, _soundBuffersTable[num].buffer);
 	_currentPlayingSoundPriority = priority;
 }
 
@@ -1842,7 +1480,7 @@ void Game::oop_startDialogue() {
 	_scriptDialogFileName = _objectScript.fetchNextString();
 	_scriptDialogSprite1 = _objectScript.fetchNextString();
 	_scriptDialogSprite2 = _objectScript.fetchNextString();
-	handleDialogue();
+	_startDialogue = true;
 }
 
 void Game::oop_switchSceneClearBoxes() {
@@ -1877,7 +1515,9 @@ void Game::oop_switchSceneCopyBoxes() {
 	if (foundScene) {
 		for (int i = 0; i < 10; ++i) {
 			_boxesCountTable[10 + i] = _boxesCountTable[i];
-			memcpy(&_boxesTable[10 + i][0], &_boxesTable[i][0], sizeof(Box) * 10);
+			if (_boxesCountTable[i] != 0) {
+				memcpy(&_boxesTable[10 + i][0], &_boxesTable[i][0], sizeof(Box) * _boxesCountTable[i]);
+			}
 		}
 	}
 }

@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007 Gregory Montoir
+ * Copyright (C) 2007-2008 Gregory Montoir
  */
 
 #ifndef UTIL_H__
@@ -15,7 +15,7 @@ enum {
 	DBG_RES      = 1 << 3,
 	DBG_DIALOGUE = 1 << 4,
 	DBG_MIXER    = 1 << 5,
-	DBG_WIN31    = 1 << 6
+	DBG_WIN16    = 1 << 6
 };
 
 extern uint16 g_debugMask;

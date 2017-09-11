@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007 Gregory Montoir
+ * Copyright (C) 2007-2008 Gregory Montoir
  */
 
 #include "decoder.h"
@@ -148,7 +148,7 @@ void Game::loadWGP(const char *fileName) {
 	int offs = kOffsetBitmapBits;
 	int len = 0;
 	int tag = fp->readUint16LE();
-	if (tag == 0x4D42) { // for scene _10 (uncompressed .bmp)
+	if (tag == 0x4D42) { // _10.SCN (uncompressed .bmp)
 		len = fp->readUint32LE() - 14;
 		fp->seek(8, SEEK_CUR);
 		fp->read(_bitmapBuffer0, len);
@@ -218,14 +218,17 @@ void Game::loadSPR(const char *fileName, SceneAnimation *sa) {
 	}
 }
 
-static void dumpObjectScript(SceneAnimation *sa) {
-#if 0
-	char filePath[512];
-	sprintf(filePath, "dumps/%s.script", fileName);
-	File f;
-	if (f.open(_dataPath, dump, "wb")) {
-		f.write(sa->scriptData, sa->scriptSize);
-		f.close();
+static void dumpObjectScript(SceneAnimation *sa, const char *fileName) {
+#if 1
+	const char *name = strrchr(fileName, '\\');
+	if (name) {
+		char filePath[512];
+		sprintf(filePath, "dumps/%s.script", name + 1);
+		File f;
+		if (f.open(filePath, "wb")) {
+			f.write(sa->scriptData, sa->scriptSize);
+			f.close();
+		}
 	}
 #endif
 }
@@ -266,7 +269,6 @@ void Game::loadMOV(const char *fileName) {
 	sa->firstObjectIndex = _sceneObjectsCount;
 	sa->soundBuffersCount = 0;
 	sa->firstSoundBufferIndex = _soundBuffersCount;
-
 	while (1) {
 		int type = fp->readUint16LE();
 		switch (type) {
@@ -289,9 +291,7 @@ void Game::loadMOV(const char *fileName) {
 					break;
 				}
 				--index;
-				assert(_boxesCountTable[index] < 10);
-				int num = _boxesCountTable[index];
-				Box *box = &_boxesTable[index][num];
+				Box *box = derefBox(index, _boxesCountTable[index]);
 				box->state = fp->readByte();
 				box->x1 = fp->readUint16LE();
 				box->y1 = fp->readUint16LE();
@@ -356,8 +356,12 @@ void Game::loadMOV(const char *fileName) {
 						break;
 					case 6000: {
 							int var = fp->readUint16LE();
+							assert(var >= 0 && var < 10);
 							so->varsTable[var] = fp->readUint16LE();
 						}
+						break;
+					default:
+						assert(0);
 						break;
 					}
 				}
@@ -370,7 +374,7 @@ void Game::loadMOV(const char *fileName) {
 			if (sa->scriptSize != 0) {
 				sa->scriptData = (uint8 *)malloc(sa->scriptSize);
 				fp->read(sa->scriptData, sa->scriptSize);
-				dumpObjectScript(sa);
+				dumpObjectScript(sa, fileName);
 			}
 			break;
 		case 5:

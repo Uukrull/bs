@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007 Gregory Montoir
+ * Copyright (C) 2007-2008 Gregory Montoir
  */
 
 #include <SDL.h>
@@ -9,7 +9,7 @@
 enum {
 	kMaxBlitRects = 50,
 	kSoundSampleRate = 22050,
-	kSoundSampleSize = 2048
+	kSoundSampleSize = 4096
 };
 
 struct SystemStub_SDL : SystemStub {
@@ -26,7 +26,6 @@ struct SystemStub_SDL : SystemStub {
 	bool _fullScreenRedraw;
 	bool _fullScreenDisplay;
 	int _soundSampleRate;
-	int _soundSampleSize;
 	SDL_Overlay *_yuv;
 	int _yuvW, _yuvH;
 	bool _yuvLocked;
@@ -35,6 +34,7 @@ struct SystemStub_SDL : SystemStub {
 	virtual void init(const char *title, int w, int h);
 	virtual void destroy();
 	virtual void setPalette(const uint8 *pal, int n);
+	virtual void fillRect(int x, int y, int w, int h, uint8 color);
 	virtual void copyRect(int x, int y, int w, int h, const uint8 *buf, int pitch, bool transparent);
 	virtual void darkenRect(int x, int y, int w, int h);
 	virtual void updateScreen();
@@ -49,7 +49,6 @@ struct SystemStub_SDL : SystemStub {
 	virtual void startAudio(AudioCallback callback, void *param);
 	virtual void stopAudio();
 	virtual int getOutputSampleRate();
-	virtual int getOutputSampleSize();
 
 	void clipDirtyRect(int &x, int &y, int &w, int &h);
 	void addDirtyRect(int x, int y, int w, int h);
@@ -87,7 +86,6 @@ void SystemStub_SDL::init(const char *title, int w, int h) {
 	_fullScreenDisplay = false;
 	setScreenDisplay(_fullScreenDisplay);
 	_soundSampleRate = 0;
-	_soundSampleSize = 0;
 }
 
 void SystemStub_SDL::destroy() {
@@ -110,6 +108,21 @@ void SystemStub_SDL::setPalette(const uint8 *pal, int n) {
 		pal += 4;
 	}
 	_fullScreenRedraw = true;
+}
+
+void SystemStub_SDL::fillRect(int x, int y, int w, int h, uint8 color) {
+	clipDirtyRect(x, y, w, h);
+	if (w <= 0 || h <= 0) {
+		return;
+	}
+	addDirtyRect(x, y, w, h);
+	uint32 *p = _offscreen + y * _screenW + x;
+	while (h--) {
+		for (int i = 0; i < w; ++i) {
+			p[i] = _pal[color];
+		}
+		p += _screenW;
+	}
 }
 
 void SystemStub_SDL::copyRect(int x, int y, int w, int h, const uint8 *buf, int pitch, bool transparent) {
@@ -464,13 +477,12 @@ void SystemStub_SDL::startAudio(AudioCallback callback, void *param) {
 	memset(&desired, 0, sizeof(desired));
 	desired.freq = kSoundSampleRate;
 	desired.format = AUDIO_S16SYS;
-	desired.channels = 1;
+	desired.channels = 2;
 	desired.samples = kSoundSampleSize;
 	desired.callback = callback;
 	desired.userdata = param;
 	if (SDL_OpenAudio(&desired, &obtained) == 0) {
 		_soundSampleRate = obtained.freq;
-		_soundSampleSize = obtained.samples / 2;
 		SDL_PauseAudio(0);
 	} else {
 		error("SystemStub_SDL::startAudio() Unable to open sound device");
@@ -483,10 +495,6 @@ void SystemStub_SDL::stopAudio() {
 
 int SystemStub_SDL::getOutputSampleRate() {
 	return _soundSampleRate;
-}
-
-int SystemStub_SDL::getOutputSampleSize() {
-	return _soundSampleSize;
 }
 
 void SystemStub_SDL::clipDirtyRect(int &x, int &y, int &w, int &h) {
@@ -524,4 +532,3 @@ void SystemStub_SDL::setScreenDisplay(bool fullscreen) {
 	_blitRectsCount = 0;
 	_fullScreenRedraw = true;
 }
-

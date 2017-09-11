@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007 Gregory Montoir
+ * Copyright (C) 2007-2008 Gregory Montoir
  */
 
 #ifndef SYSTEMSTUB_H__
@@ -42,6 +42,7 @@ struct SystemStub {
 	virtual void destroy() = 0;
 
 	virtual void setPalette(const uint8 *pal, int n) = 0;
+	virtual void fillRect(int x, int y, int w, int h, uint8 color) = 0;
 	virtual void copyRect(int x, int y, int w, int h, const uint8 *buf, int pitch, bool transparent = false) = 0;
 	virtual void darkenRect(int x, int y, int w, int h) = 0;
 	virtual void updateScreen() = 0;
@@ -59,7 +60,6 @@ struct SystemStub {
 	virtual void startAudio(AudioCallback callback, void *param) = 0;
 	virtual void stopAudio() = 0;
 	virtual int getOutputSampleRate() = 0;
-	virtual int getOutputSampleSize() = 0;
 };
 
 extern SystemStub *SystemStub_SDL_create();

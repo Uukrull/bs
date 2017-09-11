@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007 Gregory Montoir
+ * Copyright (C) 2007-2008 Gregory Montoir
  */
 
 #include "str.h"
@@ -21,8 +21,12 @@ void stringToUpperCase(char *p) {
 	}
 }
 
+static bool isIgnorableChar(char c) {
+	return (c == 0x60); // C1_05.SCN
+}
+
 static bool isWhitespace(char c) {
-	return (c == ' ' || c == '\t' || c == '\r' || c == '\n');
+	return (c == ' ' || c == '\t' || c == '\r' || c == '\n' || isIgnorableChar(c));
 }
 
 char *stringTrimRight(char *p) {

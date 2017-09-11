@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007 Gregory Montoir
+ * Copyright (C) 2007-2008 Gregory Montoir
  */
 
 #include "avi_player.h"
@@ -332,11 +332,20 @@ AVI_Player::AVI_Player(SystemStub *stub)
 }
 
 AVI_Player::~AVI_Player() {
+	while (_soundQueue) {
+		AVI_SoundBufferQueue *next = _soundQueue->next;
+		free(_soundQueue->buffer);
+		free(_soundQueue);
+		_soundQueue = next;
+	}
 }
 
 void AVI_Player::play(File *f) {
+	_soundQueue = 0;
+	_soundQueuePreloadSize = 0;
 	if (_demux.open(f)) {
 		_stub->setYUV(true, _demux._width, _demux._height);
+		_stub->startAudio(AVI_Player::mixCallback, this);
 		for (int i = 0; i < _demux._frames; ++i) {
 			uint32 nextFrameTimeStamp = _stub->getTimeStamp() + 1000 / _demux._frameRate;
 			_stub->processEvents();
@@ -348,14 +357,10 @@ void AVI_Player::play(File *f) {
 			while (_demux.readNextChunk(chunk)) {
 				switch (chunk.type) {
 				case kChunkAudioType:
-					// FIXME ignore for now
+					decodeAudioChunk(chunk);
 					break;
 				case kChunkVideoType:
-					_cinepak._yuvFrame = _stub->lockYUV(&_cinepak._yuvPitch);
-					if (_cinepak._yuvFrame) {
-						_cinepak.decode(chunk.data, chunk.dataSize);
-					}
-					_stub->unlockYUV();
+					decodeVideoChunk(chunk);
 					break;
 				}
 			}
@@ -364,7 +369,76 @@ void AVI_Player::play(File *f) {
 				_stub->sleep(diff);
 			}
 		}
+		_stub->stopAudio();
 		_stub->setYUV(false, 0, 0);
 		_demux.close();
 	}
+}
+
+void AVI_Player::decodeAudioChunk(AVI_Chunk &c) {
+	_stub->lockAudio();
+	AVI_SoundBufferQueue *sbq = (AVI_SoundBufferQueue *)malloc(sizeof(AVI_SoundBufferQueue));
+	if (sbq) {
+		sbq->buffer = (uint8 *)malloc(c.dataSize);
+		if (sbq->buffer) {
+			memcpy(sbq->buffer, c.data, c.dataSize);
+			sbq->size = c.dataSize;
+			sbq->offset = 0;
+			sbq->next = 0;
+		} else {
+			free(sbq);
+			sbq = 0;
+		}
+	}
+	if (sbq) {
+		if (!_soundQueue) {
+			_soundQueue = sbq;
+		} else {
+			AVI_SoundBufferQueue *p = _soundQueue;
+			while (1) {
+				if (!p->next) {
+					p->next = sbq;
+					break;
+				}
+				p = p->next;
+			}
+		}
+		if (_soundQueuePreloadSize < kSoundPreloadSize) {
+			++_soundQueuePreloadSize;
+		}
+	}
+	_stub->unlockAudio();
+}
+
+void AVI_Player::decodeVideoChunk(AVI_Chunk &c) {
+	_cinepak._yuvFrame = _stub->lockYUV(&_cinepak._yuvPitch);
+	if (_cinepak._yuvFrame) {
+		_cinepak.decode(c.data, c.dataSize);
+	}
+	_stub->unlockYUV();
+}
+
+void AVI_Player::mix(int16 *buf, int samples) {
+	if (_soundQueuePreloadSize < kSoundPreloadSize) {
+		return;
+	}
+	while (_soundQueue && samples > 0) {
+		int16 sample = (_soundQueue->buffer[_soundQueue->offset] << 8) ^ 0x8000;
+		*buf++ = sample;
+		*buf++ = sample;
+		_soundQueue->offset += 2; // skip every second sample (44Khz stream vs 22Khz mixer)
+		if (_soundQueue->offset >= _soundQueue->size) {
+			AVI_SoundBufferQueue *next = _soundQueue->next;
+			free(_soundQueue->buffer);
+			free(_soundQueue);
+			_soundQueue = next;
+		}
+		--samples;
+	}
+}
+
+void AVI_Player::mixCallback(void *param, uint8 *buf, int len) {
+	memset(buf, 0, len);
+	assert((len & 3) == 0);
+	((AVI_Player *)param)->mix((int16 *)buf, len / 4);
 }

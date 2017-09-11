@@ -1,6 +1,6 @@
 /*
  * Bermuda Syndrome engine rewrite
- * Copyright (C) 2007 Gregory Montoir
+ * Copyright (C) 2007-2008 Gregory Montoir
  */
 
 #include "file.h"
@@ -8,8 +8,8 @@
 #include "mixer.h"
 #include "systemstub.h"
 
-int Game::win31_sndPlaySound(int op, void *data) {
-	debug(DBG_WIN31, "win31_sndPlaySound() %d", op);
+int Game::win16_sndPlaySound(int op, void *data) {
+	debug(DBG_WIN16, "win16_sndPlaySound() %d", op);
 	switch (op) {
 	case 22:
 		if (!_mixer->isSoundPlaying(_mixerSoundId)) {
@@ -17,8 +17,13 @@ int Game::win31_sndPlaySound(int op, void *data) {
 		}
 		break;
 	case 3: {
-			FileHolder fp(_fs, (const char *)data);
-			_mixer->playSoundWav(fp.operator->(), &_mixerSoundId);
+			const char *fileName = (const char *)data;
+			if (_fs.existFile(fileName)) {
+				FileHolder fp(_fs, fileName);
+				_mixer->playSoundWav(fp.operator->(), &_mixerSoundId);
+			} else {
+				warning("Unable to open wav file '%s'", fileName);
+			}
 		}
 		break;
 	case 6:
@@ -26,14 +31,14 @@ int Game::win31_sndPlaySound(int op, void *data) {
 		_mixer->stopSound(_mixerSoundId);
 		break;
 	default:
-		warning("Unhandled op %d in win31_sndPlaySound", op);
+		warning("Unhandled op %d in win16_sndPlaySound", op);
 		break;
 	}
 	return 0;
 }
 
-void Game::win31_stretchBits(SceneBitmap *bits, int srcHeight, int srcWidth, int srcY, int srcX, int dstHeight, int dstWidth, int dstY, int dstX) {
-	debug(DBG_WIN31, "win31_stretchBits() %d,%d %d,%d", srcX, srcY, srcWidth, srcHeight);
+void Game::win16_stretchBits(SceneBitmap *bits, int srcHeight, int srcWidth, int srcY, int srcX, int dstHeight, int dstWidth, int dstY, int dstX) {
+	debug(DBG_WIN16, "win16_stretchBits() %d,%d %d,%d", srcX, srcY, srcWidth, srcHeight);
 	assert(srcWidth == dstWidth && srcHeight == dstHeight);
 	const uint8 *src = bits->bits + srcY * bits->pitch + srcX;
 	if (dstX >= kGameScreenWidth) {

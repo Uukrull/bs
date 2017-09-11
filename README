@@ -1,6 +1,6 @@
 
 Bermuda Syndrome/SDL README
-Release version: 0.1.2 (Aug 15 2007)
+Release version: 0.1.3 (March 24 2008)
 -------------------------------------------------------------------------------
 
 
@@ -26,7 +26,7 @@ Running:
 
 By default, the engine will try to load the game data files from the 'DATA'
 directory. The savestates are saved in the current directory. If you have the
-CD game soundtrack, you can rip the tracks to 22 Khz mono Vorbis .ogg files.
+CD game soundtrack, you can rip the tracks to 22 Khz stereo Vorbis .ogg files.
 
 The paths can be changed using command line switches :
 
@@ -58,7 +58,6 @@ Todo:
 
 - Speed up the screen rendering
 - Add 320x240 downscaler
-- Add/uncomment required opcodes
 
 
 Contact:
