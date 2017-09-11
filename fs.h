@@ -18,19 +18,24 @@ struct FileSystem {
 	File *openFile(const char *path, bool errorIfNotFound = true);
 	void closeFile(File *f);
 
+	bool existFile(const char *path);
+
 	FileSystem_impl *_impl;
 };
 
 struct FileHolder {
 	FileHolder(FileSystem &fs, const char *path)
-		: _fs(fs), _fp(0) {
+		: _fs(fs) {
 		_fp = _fs.openFile(path);
 	}
 
 	~FileHolder() {
-		if (_fp) {
-			_fs.closeFile(_fp);
-		}
+		_fs.closeFile(_fp);
+		_fp = 0;
+	}
+
+	File *operator->() {
+		return _fp;
 	}
 
 	FileSystem &_fs;

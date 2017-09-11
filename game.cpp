@@ -15,6 +15,7 @@ static const char *_gameWindowTitle = "Bermuda Syndrome";
 Game::Game(SystemStub *stub, const char *dataPath, const char *savePath, const char *musicPath)
 	: _fs(dataPath), _stub(stub), _savePath(savePath), _musicPath(musicPath) {
 	_mixer = new Mixer(_stub);
+	_isDemo = _fs.existFile("-00.SCN");
 }
 
 Game::~Game() {
@@ -42,6 +43,7 @@ void Game::restart() {
 	_scriptDialogSprite2 = 0;
 
 	_switchScene = true;
+	_loadState = false;
 	_clearSceneData = false;
 	_gameOver = false;
 
@@ -83,42 +85,54 @@ void Game::restart() {
 	_sceneConditionsCount = 0;
 	memset(_sceneObjectStatusTable, 0, sizeof(_sceneObjectStatusTable));
 	_sceneObjectStatusCount = 0;
+
+	strcpy(_tempTextBuffer, _isDemo ? "-01.SCN" : "_01.SCN");
 }
 
 void Game::mainLoop() {
 	_stub->init(_gameWindowTitle, kGameScreenWidth, kGameScreenHeight);
-	restart();
 	allocateTables();
 	loadCommonSprites();
 
 	_mixer->open();
 
-	strcpy(_tempTextBuffer, "_01.SCN");
-
+	restart();
 	_lastFrameTimeStamp = _stub->getTimeStamp();
-
 	while (!_stub->_quit) {
 		if (_switchScene) {
 			_switchScene = false;
 			if (stringEndsWith(_tempTextBuffer, "SCN")) {
 				win31_sndPlaySound(6);
 				debug(DBG_GAME, "switch to scene '%s'", _tempTextBuffer);
+				if (strcmp(_tempTextBuffer, "PIC4.SCN") == 0) {
+					debug(DBG_GAME, "End of game");
+					break;
+				}
 				strcpy(_currentSceneScn, _tempTextBuffer);
 				parseSCN(_tempTextBuffer);
 			} else {
 				debug(DBG_GAME, "load mov '%s'", _tempTextBuffer);
 				loadMOV(_tempTextBuffer);
 			}
-			assert(_sceneObjectsCount != 0); // else get back to the menu
+			if (_loadState) {
+				_loadState = false;
+				loadState(_stateSlot, false);
+				playMusic(_musicName);
+				memset(_keysPressed, 0, sizeof(_keysPressed));
+			}
+			assert(_sceneObjectsCount != 0);
 			if (_currentBagObject == -1) {
 				_currentBagObject = _bagObjectsCount - 1;
 				if (_currentBagObject > 0) {
 					_currentBagObject = 0;
 				}
 			}
-			_gameOver = false;
 			if (_loadDataState != 0) {
 				setupScreenPalette(_bitmapBuffer0 + kOffsetBitmapPalette);
+			}
+			_gameOver = false;
+			for (int i = 0; i < _sceneObjectsCount; ++i) { // XXX not in the original unless I miss something, fixes _08->TELE05
+				reinitializeObjects(i);
 			}
 		}
 //		_skipUpdateScreen = true;
@@ -158,14 +172,6 @@ void Game::updateKeyPressedTable() {
 		_stub->_pi.ctrl = false;
 		_lifeBarDisplayed = !_lifeBarDisplayed;
 	}
-	if (_stub->_pi.load) {
-		_stub->_pi.load = false;
-		loadState(_stateSlot);
-	}
-	if (_stub->_pi.save) {
-		_stub->_pi.save = false;
-		saveState(_stateSlot);
-	}
 	if (_stub->_pi.stateSlot != 0) {
 		int slot = _stateSlot + _stub->_pi.stateSlot;
 		if (slot >= 1 && slot < 100) {
@@ -173,6 +179,21 @@ void Game::updateKeyPressedTable() {
 			debug(DBG_INFO, "Current game state slot is %d", _stateSlot);
 		}
 		_stub->_pi.stateSlot = 0;
+	}
+	if (_stub->_pi.load) {
+		_stub->_pi.load = false;
+		loadState(_stateSlot, true);
+		_loadState = _switchScene;
+	}
+	if (_stub->_pi.save) {
+		_stub->_pi.save = false;
+		saveState(_stateSlot);
+	}
+	if (_gameOver) {
+		if (_stub->_pi.enter) {
+			_stub->_pi.enter = false;
+			restart();
+		}
 	}
 }
 
@@ -210,15 +231,17 @@ void Game::clearSceneData(int anim) {
 //		}
 //	}
 	for (int i = NUM_SCENE_OBJECT_FRAMES - 1; i >= _sceneObjectFramesCount; --i) {
-		if (_sceneObjectFramesTable[i].data) {
-			free(_sceneObjectFramesTable[i].data);
-			_sceneObjectFramesTable[i].data = 0;
+		SceneObjectFrame *sof = &_sceneObjectFramesTable[i];
+		if (sof->data) {
+			free(sof->data);
+			sof->data = 0;
 		}
 	}
 	for (int i = NUM_SCENE_ANIMATIONS - 1; i >= _animationsCount; --i) {
-		if (_animationsTable[i].scriptData) {
-			free(_animationsTable[i].scriptData);
-			_animationsTable[i].scriptData = 0;
+		SceneAnimation *sa = &_animationsTable[i];
+		if (sa->scriptData) {
+			free(sa->scriptData);
+			sa->scriptData = 0;
 		}
 	}
 	for (int i = NUM_SCENE_OBJECTS - 1; i >= _sceneObjectsCount; --i) {
@@ -231,9 +254,9 @@ void Game::clearSceneData(int anim) {
 	}
 }
 
-void Game::reinitializeObjects(int index) {
+void Game::reinitializeObjects(int index) { // XXX reinitializeObject(int object) {
 	debug(DBG_GAME, "Game::reinitializeObjects(%d)", index);
-	SceneObject *so = &_sceneObjectsTable[index];
+	SceneObject *so = derefSceneObject(index);
 	if (so->state != 1 && so->state != 2) {
 		int16 state = 0;
 		switch (so->mode) {
@@ -294,6 +317,9 @@ void Game::updateObjects() {
 			so->xPrev = so->x;
 			so->yPrev = so->y;
 			so->frameNumPrev = so->frameNum;
+			assert(so->frameNumPrev >= 0 && so->frameNumPrev < _sceneObjectFramesCount);
+			assert(so->frameNum >= 0 && so->frameNum < _sceneObjectFramesCount);
+			assert(so->motionNum2 >= 0 && so->motionNum2 < _sceneObjectMotionsCount);
 			so->frameNum = _sceneObjectFramesTable[so->frameNumPrev].hdr.num + _sceneObjectMotionsTable[so->motionNum2].firstFrameIndex;
 			const int dx = _sceneObjectFramesTable[so->frameNumPrev].hdr.xPos - _sceneObjectFramesTable[so->frameNum].hdr.xPos;
 			const int dy = _sceneObjectFramesTable[so->frameNumPrev].hdr.yPos - _sceneObjectFramesTable[so->frameNum].hdr.yPos;
@@ -349,7 +375,7 @@ void Game::runObjectsScript() {
 					while (_objectScript.dataOffset < statementSize) {
 						int op = _objectScript.fetchNextWord();
 						debug(DBG_OPCODES, "statement %d operator %d op %d", statement, i, op);
-						if (op == 100) {
+						if (op == 100) { // &Game::oop_breakObjectScript
 							statementSize = _objectScript.dataOffset = endOfDataOffset;
 							break;
 						}
@@ -405,18 +431,15 @@ int Game::findBagObjectByName(const char *objectName) const {
 
 int Game::getObjectTranslateXPos(int object, int dx1, int div, int dx2) {
 	debug(DBG_GAME, "Game::getObjectTranslateXPos(%d, %d, %d, %d)", object, dx1, div, dx2);
-	SceneObject *so = &_sceneObjectsTable[object];
+	SceneObject *so = derefSceneObject(object);
 	int16 _di = _sceneObjectMotionsTable[so->motionNum + so->motionInit].firstFrameIndex + so->motionFrameNum;
 	int16 _ax, _dx;
 	if (so->flip == 2) {
-		_ax = _sceneObjectFramesTable[_di].hdr.xPos;
-		_ax -= _sceneObjectFramesTable[so->frameNum].hdr.xPos;
-		_ax += _sceneObjectFramesTable[_di].hdr.w;
-		_ax -= _sceneObjectFramesTable[so->frameNum].hdr.w;
+		_ax = _sceneObjectFramesTable[_di].hdr.xPos - _sceneObjectFramesTable[so->frameNum].hdr.xPos;
+		_ax += _sceneObjectFramesTable[_di].hdr.w - _sceneObjectFramesTable[so->frameNum].hdr.w;
 		_ax += dx1;
 	} else {
-		_ax = _sceneObjectFramesTable[so->frameNum].hdr.xPos;
-		_ax -= _sceneObjectFramesTable[_di].hdr.xPos;
+		_ax = _sceneObjectFramesTable[so->frameNum].hdr.xPos - _sceneObjectFramesTable[_di].hdr.xPos;
 	}
 	if (so->flipInit == 2) {
 		_dx = 1 - _sceneObjectFramesTable[_di].hdr.w - dx1;
@@ -433,18 +456,15 @@ int Game::getObjectTranslateXPos(int object, int dx1, int div, int dx2) {
 
 int Game::getObjectTranslateYPos(int object, int dy1, int div, int dy2) {
 	debug(DBG_GAME, "Game::getObjectTranslateYPos(%d, %d, %d, %d)", object, dy1, div, dy2);
-	SceneObject *so = &_sceneObjectsTable[object];
+	SceneObject *so = derefSceneObject(object);
 	int16 _di = _sceneObjectMotionsTable[so->motionNum + so->motionInit].firstFrameIndex + so->motionFrameNum;
 	int16 _ax, _dx;
 	if (so->flip == 1) {
-		_ax = _sceneObjectFramesTable[_di].hdr.yPos;
-		_ax -= _sceneObjectFramesTable[so->frameNum].hdr.yPos;
-		_ax += _sceneObjectFramesTable[_di].hdr.h;
-		_ax -= _sceneObjectFramesTable[so->frameNum].hdr.h;
+		_ax = _sceneObjectFramesTable[_di].hdr.yPos - _sceneObjectFramesTable[so->frameNum].hdr.yPos;
+		_ax += _sceneObjectFramesTable[_di].hdr.h - _sceneObjectFramesTable[so->frameNum].hdr.h;
 		_ax += dy1;
 	} else {
-		_ax = _sceneObjectFramesTable[so->frameNum].hdr.yPos;
-		_ax -= _sceneObjectFramesTable[_di].hdr.yPos;
+		_ax = _sceneObjectFramesTable[so->frameNum].hdr.yPos - _sceneObjectFramesTable[_di].hdr.yPos;
 	}
 	if (so->flipInit == 1) {
 		_dx = 1 - _sceneObjectFramesTable[_di].hdr.h - dy1;
@@ -502,7 +522,7 @@ void Game::copyBufferToBuffer(int x, int y, int w, int h, SceneBitmap *src, Scen
 	const uint8 *p_src = src->bits;
 
 	const int x2 = MIN(src->w, dst->w);
-	if (x > x2 || x + w <= 0) {
+	if (w <= 0 || x > x2 || x + w <= 0) {
 		return;
 	}
 	if (x < 0) {
@@ -515,7 +535,7 @@ void Game::copyBufferToBuffer(int x, int y, int w, int h, SceneBitmap *src, Scen
 	}
 
 	const int y2 = MIN(src->h, dst->h);
-	if (y >= y2 || y + h <= 0) {
+	if (h <= 0 || y >= y2 || y + h <= 0) {
 		return;
 	}
 	if (y < 0) {
@@ -540,7 +560,7 @@ void Game::drawBox(int x, int y, int w, int h, SceneBitmap *src, SceneBitmap *ds
 	const uint8 *p_src = src->bits;
 
 	const int x2 = MIN(src->w, dst->w);
-	if (x > x2 || x + w <= 0) {
+	if (w <= 0 || x > x2 || x + w <= 0) {
 		return;
 	}
 	if (x < 0) {
@@ -553,7 +573,7 @@ void Game::drawBox(int x, int y, int w, int h, SceneBitmap *src, SceneBitmap *ds
 	}
 
 	const int y2 = MIN(src->h, dst->h);
-	if (y >= y2 || y + h <= 0) {
+	if (h <= 0 || y >= y2 || y + h <= 0) {
 		return;
 	}
 	if (y < 0) {
@@ -681,6 +701,7 @@ void Game::redrawObjectBoxes(int previousObject, int currentObject) {
 	}
 }
 
+#if 0
 bool Game::isObjectInRect(int object) {
 	SceneObject *so = _sortedSceneObjectsTable[object];
 	if (so->xPrev + _sceneObjectFramesTable[so->frameNumPrev].hdr.w < so->x) {
@@ -697,6 +718,7 @@ bool Game::isObjectInRect(int object) {
 	}
 	return true;
 }
+#endif
 
 void Game::redrawObjects(bool skipUpdateScreen) {
 	sortObjects();
@@ -842,8 +864,11 @@ void Game::playMusic(const char *name) {
 		{ "..\\midi\\gameover.mid", 11 },
 		{ "..\\midi\\complete.mid", 12 }
 	};
-	stopMusic();
 	assert(_musicTrack == 0);
+	if (name[0] == 0) {
+		return;
+	}
+	stopMusic();
 	for (unsigned int i = 0; i < ARRAYSIZE(_midiMapping); ++i) {
 		if (strcasecmp(_midiMapping[i].fileName, name) == 0) {
 			char filePath[512];
@@ -862,7 +887,7 @@ void Game::playMusic(const char *name) {
 }
 
 void Game::changeObjectMotionFrame(int object, int object2, int useObject2, int count1, int count2, int useDx, int dx, int useDy, int dy) {
-	SceneObject *so = &_sceneObjectsTable[object];
+	SceneObject *so = derefSceneObject(object);
 	if (so->statePrev != 0) {
 		int num;
 		if (useObject2) {
@@ -907,7 +932,7 @@ void Game::changeObjectMotionFrame(int object, int object2, int useObject2, int 
 }
 
 int16 Game::getObjectTransformXPos(int object) {
-	SceneObject *so = &_sceneObjectsTable[object];
+	SceneObject *so = derefSceneObject(object);
 	int16 a0 = _objectScript.fetchNextWord();
 	int16 a2 = _objectScript.fetchNextWord();
 	int16 a4 = _objectScript.fetchNextWord();
@@ -920,7 +945,7 @@ int16 Game::getObjectTransformXPos(int object) {
 }
 
 int16 Game::getObjectTransformYPos(int object) {
-	SceneObject *so = &_sceneObjectsTable[object];
+	SceneObject *so = derefSceneObject(object);
 	int16 a0 = _objectScript.fetchNextWord();
 	int16 a2 = _objectScript.fetchNextWord();
 	int16 a4 = _objectScript.fetchNextWord();
@@ -933,7 +958,7 @@ int16 Game::getObjectTransformYPos(int object) {
 }
 
 bool Game::comparePrevObjectTransformXPos(int object, bool fetchCmp, int cmpX) {
-	SceneObject *so = &_sceneObjectsTable[object];
+	SceneObject *so = derefSceneObject(object);
 
 	int16 a0 = _objectScript.fetchNextWord();
 	int16 a2 = _objectScript.fetchNextWord();
@@ -965,7 +990,7 @@ bool Game::comparePrevObjectTransformXPos(int object, bool fetchCmp, int cmpX) {
 }
 
 bool Game::compareObjectTransformXPos(int object, bool fetchCmp, int cmpX) {
-	SceneObject *so = &_sceneObjectsTable[object];
+	SceneObject *so = derefSceneObject(object);
 
 	int16 a0 = _objectScript.fetchNextWord();
 	int16 a2 = _objectScript.fetchNextWord();
@@ -997,7 +1022,7 @@ bool Game::compareObjectTransformXPos(int object, bool fetchCmp, int cmpX) {
 }
 
 bool Game::comparePrevObjectTransformYPos(int object, bool fetchCmp, int cmpY) {
-	SceneObject *so = &_sceneObjectsTable[object];
+	SceneObject *so = derefSceneObject(object);
 
 	int16 a0 = _objectScript.fetchNextWord();
 	int16 a2 = _objectScript.fetchNextWord();
@@ -1029,7 +1054,7 @@ bool Game::comparePrevObjectTransformYPos(int object, bool fetchCmp, int cmpY) {
 }
 
 bool Game::compareObjectTransformYPos(int object, bool fetchCmp, int cmpY) {
-	SceneObject *so = &_sceneObjectsTable[object];
+	SceneObject *so = derefSceneObject(object);
 
 	int16 a0 = _objectScript.fetchNextWord();
 	int16 a2 = _objectScript.fetchNextWord();
@@ -1061,18 +1086,18 @@ bool Game::compareObjectTransformYPos(int object, bool fetchCmp, int cmpY) {
 }
 
 void Game::setupObjectPos(int object, int object2, int useObject2, int useData, int type1, int type2) {
-	SceneObject *so = &_sceneObjectsTable[object];
+	SceneObject *so = derefSceneObject(object);
 	if (so->statePrev != 0) {
 		int16 _ax, varE, varC, var4, var6, var8, varA;
 		if (type1 == 2) {
 			int16 a0 = _objectScript.fetchNextWord();
 			int16 a2 = _objectScript.fetchNextWord();
 			int16 a4 = _objectScript.fetchNextWord();
-			var4 = (a0 * _sceneObjectFramesTable[_sceneObjectsTable[object].frameNumPrev].hdr.w) / a2 + a4;
+			var4 = (a0 * _sceneObjectFramesTable[so->frameNumPrev].hdr.w) / a2 + a4;
 			a0 = _objectScript.fetchNextWord();
 			a2 = _objectScript.fetchNextWord();
 			a4 = _objectScript.fetchNextWord();
-			var6 = (a0 * _sceneObjectFramesTable[_sceneObjectsTable[object].frameNumPrev].hdr.w) / a2 + a4;
+			var6 = (a0 * _sceneObjectFramesTable[so->frameNumPrev].hdr.w) / a2 + a4;
 			if (var6 < var4) {
 				SWAP(var4, var6);
 			}
@@ -1082,42 +1107,42 @@ void Game::setupObjectPos(int object, int object2, int useObject2, int useData, 
 			int16 a0 = _objectScript.fetchNextWord();
 			int16 a2 = _objectScript.fetchNextWord();
 			int16 a4 = _objectScript.fetchNextWord();
-			var8 = (a0 * _sceneObjectFramesTable[_sceneObjectsTable[object].frameNumPrev].hdr.h) / a2 + a4;
+			var8 = (a0 * _sceneObjectFramesTable[so->frameNumPrev].hdr.h) / a2 + a4;
 			a0 = _objectScript.fetchNextWord();
 			a2 = _objectScript.fetchNextWord();
 			a4 = _objectScript.fetchNextWord();
-			varA = (a0 * _sceneObjectFramesTable[_sceneObjectsTable[object].frameNumPrev].hdr.w) / a2 + a4;
+			varA = (a0 * _sceneObjectFramesTable[so->frameNumPrev].hdr.h) / a2 + a4;
 			if (varA < var8) {
 				SWAP(var8, varA);
 			}
 			varE = varA - var8;
 		}
 		if (useObject2 == 0) {
-			_ax = _animationsTable[_sceneObjectMotionsTable[_sceneObjectsTable[object].motionNum1].animNum].firstMotionIndex;
+			_ax = _animationsTable[_sceneObjectMotionsTable[so->motionNum1].animNum].firstMotionIndex;
 		} else {
 			_ax = _sceneObjectsTable[object2].motionInit;
 		}
-		_sceneObjectsTable[object].motionNum2 = _ax + _objectScript.fetchNextWord() - 1;
+		so->motionNum2 = _ax + _objectScript.fetchNextWord() - 1;
 		if (useData == 0) {
-			_sceneObjectsTable[object].frameNum = _sceneObjectMotionsTable[_sceneObjectsTable[object].motionNum2].firstFrameIndex;
+			so->frameNum = _sceneObjectMotionsTable[so->motionNum2].firstFrameIndex;
 		} else {
-			_ax = _sceneObjectMotionsTable[_sceneObjectsTable[object].motionNum2].firstFrameIndex;
-			_sceneObjectsTable[object].frameNum = _ax + _objectScript.fetchNextWord() - 1;
+			_ax = _sceneObjectMotionsTable[so->motionNum2].firstFrameIndex;
+			so->frameNum = _ax + _objectScript.fetchNextWord() - 1;
 		}
-		int16 _si = _sceneObjectFramesTable[_sceneObjectsTable[object].frameNum].hdr.xPos;
-		_si -= _sceneObjectFramesTable[_sceneObjectsTable[object].frameNumPrev].hdr.xPos;
+		int16 _si = _sceneObjectFramesTable[so->frameNum].hdr.xPos;
+		_si -= _sceneObjectFramesTable[so->frameNumPrev].hdr.xPos;
 		if (type1 == 2) {
-			 _si = ((var4 - varC + 1) / varC) * varC + _si % varC; // XXX var4 _ var6
+			 _si = ((var4 - varC + 1) / varC) * varC + _si % varC;
 			if (_si < var4) {
 				_si += varC;
 			}
 		} else if (type1 == 3) {
 			int16 a0 = _objectScript.fetchNextWord();
 			_objectScript.fetchNextWord();
-			_si = a0 - _sceneObjectFramesTable[_sceneObjectsTable[object].frameNumPrev].hdr.xPos;
+			_si = a0 - _sceneObjectFramesTable[so->frameNumPrev].hdr.xPos;
 		}
-		int16 _di = _sceneObjectFramesTable[_sceneObjectsTable[object].frameNum].hdr.yPos;
-		_di -= _sceneObjectFramesTable[_sceneObjectsTable[object].frameNumPrev].hdr.yPos;
+		int16 _di = _sceneObjectFramesTable[so->frameNum].hdr.yPos;
+		_di -= _sceneObjectFramesTable[so->frameNumPrev].hdr.yPos;
 		if (type2 == 2) {
 			_di = ((var8 - varE + 1) / varE) * varE + _di % varE;
 			if (_di < var8) {
@@ -1126,17 +1151,17 @@ void Game::setupObjectPos(int object, int object2, int useObject2, int useData, 
 		} else if (type2 == 3) {
 			_objectScript.fetchNextWord();
 			int16 a2 = _objectScript.fetchNextWord();
-			_di = a2 - _sceneObjectFramesTable[_sceneObjectsTable[object].frameNumPrev].hdr.yPos;
+			_di = a2 - _sceneObjectFramesTable[so->frameNumPrev].hdr.yPos;
 		}
-		if (_sceneObjectsTable[object].flipPrev == 2) {
-			_ax = _sceneObjectsTable[object].xPrev - _si;
-			_ax += _sceneObjectFramesTable[_sceneObjectsTable[object].frameNumPrev].hdr.w;
-			_ax -= _sceneObjectFramesTable[_sceneObjectsTable[object].frameNum].hdr.w;
+		if (so->flipPrev == 2) {
+			_ax = so->xPrev - _si;
+			_ax += _sceneObjectFramesTable[so->frameNumPrev].hdr.w;
+			_ax -= _sceneObjectFramesTable[so->frameNum].hdr.w;
 		} else {
-			_ax = _sceneObjectsTable[object].xPrev + _si;
+			_ax = so->xPrev + _si;
 		}
-		_sceneObjectsTable[object].x = _ax;
-		_sceneObjectsTable[object].y = _sceneObjectsTable[object].yPrev + _di;
+		so->x = _ax;
+		so->y = so->yPrev + _di;
 	}
 }
 

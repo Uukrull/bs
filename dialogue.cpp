@@ -188,6 +188,7 @@ void Game::handleDialogue() {
 		}
 	}
 	playMusic(_musicName);
+	memset(_keysPressed, 0, sizeof(_keysPressed));
 }
 
 void Game::unloadDialogueData() {
@@ -241,7 +242,7 @@ void Game::loadDialogueSprite(int spr) {
 		spriteFile = _scriptDialogSprite2;
 		break;
 	}
-	File *fp = _fs.openFile(spriteFile);
+	FileHolder fp(_fs, spriteFile);
 	int tag = fp->readUint16LE();
 	if (tag != 0x3553) {
 		error("Invalid spr format %X", tag);
@@ -257,7 +258,6 @@ void Game::loadDialogueSprite(int spr) {
 	}
 	_dialogueSpriteFrameCountTable[spr] = count;
 	_dialogueSpriteCurrentFrameTable[spr] = 0;
-	_fs.closeFile(fp);
 }
 
 void Game::loadDialogueData(const char *filename) {
@@ -267,7 +267,7 @@ void Game::loadDialogueData(const char *filename) {
 	} else {
 		unloadDialogueData();
 	}
-	File *fp = _fs.openFile(filename);
+	FileHolder fp(_fs, filename);
 	_dialogueDescriptionSize = fp->size();
 	_dialogueDescriptionBuffer = (char *)malloc(_dialogueDescriptionSize + 1);
 	if (_dialogueDescriptionBuffer) {
@@ -278,7 +278,6 @@ void Game::loadDialogueData(const char *filename) {
 		parseDLG();
 		setupDialog(_scriptDialogId);
 	}
-	_fs.closeFile(fp);
 }
 
 void Game::redrawDialogueSprite(int num) {

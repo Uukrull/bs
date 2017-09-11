@@ -40,7 +40,11 @@ void Game::deallocateTables() {
 }
 
 void Game::loadCommonSprites() {
-	_bermudaOvrData = loadFile("..\\bermuda.ovr");
+	if (_isDemo) {
+		_bermudaOvrData = 0;
+	} else {
+		_bermudaOvrData = loadFile("..\\bermuda.ovr");
+	}
 
 	loadWGP("..\\bermuda.wgp");
 	_bagBackgroundImage = _bitmapBuffer1;
@@ -115,7 +119,7 @@ void Game::unloadCommonSprites() {
 }
 
 uint8 *Game::loadFile(const char *fileName, uint8 *dst, uint32 *dstSize) {
-	File *fp = _fs.openFile(fileName);
+	FileHolder fp(_fs, fileName);
 	uint32 fileSize = fp->size();
 	if (!dst) {
 		dst = (uint8 *)malloc(fileSize);
@@ -127,42 +131,46 @@ uint8 *Game::loadFile(const char *fileName, uint8 *dst, uint32 *dstSize) {
 		*dstSize = fileSize;
 	}
 	fp->read(dst, fileSize);
-	_fs.closeFile(fp);
 	return dst;
 }
 
 void Game::loadWGP(const char *fileName) {
-	File *fp = _fs.openFile(fileName);
+	FileHolder fp(_fs, fileName);
+	int offs = kOffsetBitmapBits;
+	int len = 0;
 	int tag = fp->readUint16LE();
-	if (tag != 0x5057) {
+	if (tag == 0x4D42) { // for scene _10 (uncompressed .bmp)
+		len = fp->readUint32LE() - 14;
+		fp->seek(8, SEEK_CUR);
+		fp->read(_bitmapBuffer0, len);
+	} else if (tag == 0x5057) {
+		len = 0;
+		while (!fp->ioErr()) {
+			int sz = fp->readUint16LE();
+			if (sz != 0) {
+				fp->read(_bitmapBuffer2, sz);
+				uint32 decodedSize = decodeLzss(_bitmapBuffer2, _bitmapBuffer0 + len);
+				len += decodedSize;
+			}
+		}
+		offs += 4;
+		len += 4;
+	} else {
 		error("Invalid wgp format %X", tag);
 	}
-	int offs = 0;
-	while (!fp->ioErr()) {
-		int sz = fp->readUint16LE();
-		if (sz != 0) {
-			fp->read(_bitmapBuffer2, sz);
-			uint32 decodedSize = decodeLzss(_bitmapBuffer2, _bitmapBuffer0 + offs);
-			offs += decodedSize;
-		}
-	}
-	_fs.closeFile(fp);
-
 	_loadDataState = 1;
 
 	_bitmapBuffer1.w = READ_LE_UINT32(_bitmapBuffer0 + 4) - 1;
 	_bitmapBuffer1.h = READ_LE_UINT32(_bitmapBuffer0 + 8) - 1;
 	_bitmapBuffer1.pitch = (READ_LE_UINT32(_bitmapBuffer0 + 4) + 3) & ~3;
 	_bitmapBuffer1.bits = _bitmapBuffer2;
-
 	_bitmapBuffer3 = _bitmapBuffer1;
-	_bitmapBuffer3.bits = _bitmapBuffer0 + 40 + 1024 + 4;
-
-	memcpy(_bitmapBuffer1.bits, _bitmapBuffer3.bits, offs - 40 - 1024 - 4);
+	_bitmapBuffer3.bits = _bitmapBuffer0 + offs;
+	memcpy(_bitmapBuffer1.bits, _bitmapBuffer3.bits, len - offs);
 }
 
 void Game::loadSPR(const char *fileName, SceneAnimation *sa) {
-	File *fp = _fs.openFile(fileName);
+	FileHolder fp(_fs, fileName);
 	int tag = fp->readUint16LE();
 	if (tag != 0x3553) {
 		error("Invalid spr format %X", tag);
@@ -198,7 +206,6 @@ void Game::loadSPR(const char *fileName, SceneAnimation *sa) {
 		++sa->motionsCount;
 		++_sceneObjectMotionsCount;
 	}
-	_fs.closeFile(fp);
 }
 
 static void dumpObjectScript(SceneAnimation *sa) {
@@ -214,7 +221,7 @@ static void dumpObjectScript(SceneAnimation *sa) {
 }
 
 void Game::loadMOV(const char *fileName) {
-	File *fp = _fs.openFile(fileName);
+	FileHolder fp(_fs, fileName);
 	int tag = fp->readUint16LE();
 	if (tag != 0x354D) {
 		error("Invalid mov format %X", tag);
@@ -358,12 +365,13 @@ void Game::loadMOV(const char *fileName) {
 		case 5:
 			sa->unk26 = fp->readUint16LE();
 			break;
+		default:
+			assert(0);
 		}
 		if (type == 4) {
 			break;
 		}
 	}
-	_fs.closeFile(fp);
 
 	char filePath[128];
 	strcpy(filePath, fileName);

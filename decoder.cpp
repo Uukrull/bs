@@ -52,7 +52,7 @@ int decodeLzss(const uint8 *src, uint8 *dst) {
 		}
 		inputSize -= decodeSize;
 		src = compressedData;
-#ifndef DISABLE_DECODE_CRC_CHECK
+#if 1
 		uint16 crc = READ_LE_UINT16(src); src += 2;
 		uint16 sum = 0;
 		for (int i = 0; i < decodeSize * 8 - 1; ++i) {

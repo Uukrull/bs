@@ -416,7 +416,7 @@ static void parse_Object(char **s, Game *g) {
 		}
 		break;
 	case kParserTokenLoadStatus:
-		getNextToken_Int(s, &index);
+		getNextToken_ArrayIndex(s, &index);
 		sos = g->derefSceneObjectStatus(index);
 		_currentSceneObject->xInit = sos->x;
 		_currentSceneObject->yInit = sos->y;
@@ -494,7 +494,7 @@ static void parse_BoxDescription(char **s, Game *g) {
 void Game::parseSCN(const char *fileName) {
 	debug(DBG_GAME, "Game::parseSCN()");
 
-	File *fp = _fs.openFile(fileName);
+	FileHolder fp(_fs, fileName);
 	_sceneDescriptionSize = fp->size();
 	_sceneDescriptionBuffer = (char *)malloc(_sceneDescriptionSize + 1);
 	if (!_sceneDescriptionBuffer) {
@@ -641,5 +641,4 @@ void Game::parseSCN(const char *fileName) {
 	free(_sceneDescriptionBuffer);
 	_sceneDescriptionBuffer = 0;
 	_sceneDescriptionSize = 0;
-	_fs.closeFile(fp);
 }

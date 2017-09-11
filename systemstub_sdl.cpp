@@ -16,15 +16,15 @@ struct SystemStub_SDL : SystemStub {
 	uint32 *_offscreen;
 	uint32 *_offscreenPrev;
 	int _offscreenSize;
+	bool _blurOn;
 	SDL_Surface *_screen;
 	SDL_PixelFormat *_fmt;
 	uint32 _pal[256];
 	int _screenW, _screenH;
 	SDL_Rect _blitRects[kMaxBlitRects];
 	int _blitRectsCount;
-	bool _fullRedraw;
-	bool _blurOn;
-	bool _audioLocked;
+	bool _fullScreenRedraw;
+	bool _fullScreenDisplay;
 
 	virtual ~SystemStub_SDL() {}
 	virtual void init(const char *title, int w, int h);
@@ -44,6 +44,7 @@ struct SystemStub_SDL : SystemStub {
 
 	void clipDirtyRect(int &x, int &y, int &w, int &h);
 	void addDirtyRect(int x, int y, int w, int h);
+	void setScreenDisplay(bool fullscreen);
 };
 
 SystemStub *SystemStub_SDL_create() {
@@ -64,24 +65,18 @@ void SystemStub_SDL::init(const char *title, int w, int h) {
 		error("SystemStub_SDL::init() Unable to allocate offscreen buffer");
 	}
 	memset(_offscreen, 0, _offscreenSize);
-	_offscreenPrev = 0;
-	_blurOn = false;
 #ifdef BERMUDA_BLUR
 	_offscreenPrev = (uint32 *)malloc(_offscreenSize);
 	if (_offscreenPrev) {
 		memset(_offscreenPrev, 0, _offscreenSize);
 	}
+#else
+	_offscreenPrev = 0;
 #endif
+	_blurOn = false;
 	memset(_pal, 0, sizeof(_pal));
-	_screen = SDL_SetVideoMode(_screenW, _screenH, 32, SDL_HWSURFACE);
-	if (!_screen) {
-		error("SystemStub_SDL::init() Unable to allocate _screen buffer");
-	}
-	_fmt = _screen->format;
-	memset(_blitRects, 0, sizeof(_blitRects));
-	_blitRectsCount = 0;
-	_fullRedraw = true;
-	_audioLocked = false;
+	_fullScreenDisplay = false;
+	setScreenDisplay(_fullScreenDisplay);
 }
 
 void SystemStub_SDL::destroy() {
@@ -103,7 +98,7 @@ void SystemStub_SDL::setPalette(const uint8 *pal, int n) {
 		_pal[i] = SDL_MapRGB(_fmt, pal[2], pal[1], pal[0]);
 		pal += 4;
 	}
-	_fullRedraw = true;
+	_fullScreenRedraw = true;
 }
 
 void SystemStub_SDL::copyRect(int x, int y, int w, int h, const uint8 *buf, int pitch, bool transparent) {
@@ -195,8 +190,8 @@ static uint32 blurPixel(int x, int y, const uint32 *src, int pitch, int w, int h
 }
 
 void SystemStub_SDL::updateScreen() {
-	if (_fullRedraw) {
-		_fullRedraw = false;
+	if (_fullScreenRedraw) {
+		_fullScreenRedraw = false;
 		_blitRectsCount = 1;
 		SDL_Rect *br = &_blitRects[0];
 		br->x = 0;
@@ -242,132 +237,150 @@ void SystemStub_SDL::updateScreen() {
 }
 
 void SystemStub_SDL::processEvents() {
-	SDL_Event ev;
-	while (SDL_PollEvent(&ev)) {
-		switch (ev.type) {
-		case SDL_QUIT:
-			_quit = true;
-			break;
-		case SDL_KEYUP:
-			switch (ev.key.keysym.sym) {
-			case SDLK_LEFT:
-				_pi.dirMask &= ~PlayerInput::DIR_LEFT;
+	bool paused = false;
+	while (1) {
+		SDL_Event ev;
+		while (SDL_PollEvent(&ev)) {
+			switch (ev.type) {
+			case SDL_QUIT:
+				_quit = true;
 				break;
-			case SDLK_RIGHT:
-				_pi.dirMask &= ~PlayerInput::DIR_RIGHT;
-				break;
-			case SDLK_UP:
-				_pi.dirMask &= ~PlayerInput::DIR_UP;
-				break;
-			case SDLK_DOWN:
-				_pi.dirMask &= ~PlayerInput::DIR_DOWN;
-				break;
-			case SDLK_RETURN:
-				_pi.enter = false;
-				break;
-			case SDLK_SPACE:
-				_pi.space = false;
-				break;
-			case SDLK_RSHIFT:
-			case SDLK_LSHIFT:
-				_pi.shift = false;
-				break;
-			case SDLK_RCTRL:
-			case SDLK_LCTRL:
-				_pi.ctrl = false;
-				break;
-			case SDLK_TAB:
-				_pi.tab = false;
-				break;
-			case SDLK_ESCAPE:
-				_pi.escape = false;
-				break;
-			default:
-				break;
-			}
-			break;
-		case SDL_KEYDOWN:
-			switch (ev.key.keysym.sym) {
-			case SDLK_LEFT:
-				_pi.dirMask |= PlayerInput::DIR_LEFT;
-				break;
-			case SDLK_RIGHT:
-				_pi.dirMask |= PlayerInput::DIR_RIGHT;
-				break;
-			case SDLK_UP:
-				_pi.dirMask |= PlayerInput::DIR_UP;
-				break;
-			case SDLK_DOWN:
-				_pi.dirMask |= PlayerInput::DIR_DOWN;
-				break;
-			case SDLK_RETURN:
-				_pi.enter = true;
-				break;
-			case SDLK_SPACE:
-				_pi.space = true;
-				break;
-			case SDLK_RSHIFT:
-			case SDLK_LSHIFT:
-				_pi.shift = true;
-				break;
-			case SDLK_RCTRL:
-			case SDLK_LCTRL:
-				_pi.ctrl = true;
-				break;
-			case SDLK_TAB:
-				_pi.tab = true;
-				break;
-			case SDLK_ESCAPE:
-				_pi.escape = true;
-				break;
-			case SDLK_f:
-				_pi.fastMode = !_pi.fastMode;
-				break;
-			case SDLK_s:
-				_pi.save = true;
-				break;
-			case SDLK_l:
-				_pi.load = true;
-				break;
-			case SDLK_b:
-				if (_offscreenPrev) {
-					_blurOn = !_blurOn;
-					_fullRedraw = true;
+			case SDL_ACTIVEEVENT:
+				if (ev.active.state & SDL_APPINPUTFOCUS) {
+					paused = ev.active.gain == 0;
+					SDL_PauseAudio(paused ? 1 : 0);
 				}
 				break;
-			case SDLK_KP_PLUS:
-				_pi.stateSlot = 1;
+			case SDL_KEYUP:
+				switch (ev.key.keysym.sym) {
+				case SDLK_LEFT:
+					_pi.dirMask &= ~PlayerInput::DIR_LEFT;
+					break;
+				case SDLK_RIGHT:
+					_pi.dirMask &= ~PlayerInput::DIR_RIGHT;
+					break;
+				case SDLK_UP:
+					_pi.dirMask &= ~PlayerInput::DIR_UP;
+					break;
+				case SDLK_DOWN:
+					_pi.dirMask &= ~PlayerInput::DIR_DOWN;
+					break;
+				case SDLK_RETURN:
+					_pi.enter = false;
+					break;
+				case SDLK_SPACE:
+					_pi.space = false;
+					break;
+				case SDLK_RSHIFT:
+				case SDLK_LSHIFT:
+					_pi.shift = false;
+					break;
+				case SDLK_RCTRL:
+				case SDLK_LCTRL:
+					_pi.ctrl = false;
+					break;
+				case SDLK_TAB:
+					_pi.tab = false;
+					break;
+				case SDLK_ESCAPE:
+					_pi.escape = false;
+					break;
+				default:
+					break;
+				}
 				break;
-			case SDLK_KP_MINUS:
-				_pi.stateSlot = -1;
+			case SDL_KEYDOWN:
+				switch (ev.key.keysym.sym) {
+				case SDLK_LEFT:
+					_pi.dirMask |= PlayerInput::DIR_LEFT;
+					break;
+				case SDLK_RIGHT:
+					_pi.dirMask |= PlayerInput::DIR_RIGHT;
+					break;
+				case SDLK_UP:
+					_pi.dirMask |= PlayerInput::DIR_UP;
+					break;
+				case SDLK_DOWN:
+					_pi.dirMask |= PlayerInput::DIR_DOWN;
+					break;
+				case SDLK_RETURN:
+					_pi.enter = true;
+					break;
+				case SDLK_SPACE:
+					_pi.space = true;
+					break;
+				case SDLK_RSHIFT:
+				case SDLK_LSHIFT:
+					_pi.shift = true;
+					break;
+				case SDLK_RCTRL:
+				case SDLK_LCTRL:
+					_pi.ctrl = true;
+					break;
+				case SDLK_TAB:
+					_pi.tab = true;
+					break;
+				case SDLK_ESCAPE:
+					_pi.escape = true;
+					break;
+				case SDLK_f:
+					_pi.fastMode = !_pi.fastMode;
+					break;
+				case SDLK_s:
+					_pi.save = true;
+					break;
+				case SDLK_l:
+					_pi.load = true;
+					break;
+				case SDLK_b:
+					if (_offscreenPrev) {
+						_blurOn = !_blurOn;
+						_fullScreenRedraw = true;
+					}
+					break;
+				case SDLK_w:
+					_fullScreenDisplay = !_fullScreenDisplay;
+					setScreenDisplay(_fullScreenDisplay);
+					break;
+				case SDLK_KP_PLUS:
+					_pi.stateSlot = 1;
+					break;
+				case SDLK_KP_MINUS:
+					_pi.stateSlot = -1;
+					break;
+				default:
+					break;
+				}
+				break;
+			case SDL_MOUSEBUTTONDOWN:
+				if (ev.button.button == SDL_BUTTON_LEFT) {
+					_pi.leftMouseButton = true;
+				} else if (ev.button.button == SDL_BUTTON_RIGHT) {
+					_pi.rightMouseButton = true;
+				}
+				_pi.mouseX = ev.button.x;
+				_pi.mouseY = ev.button.y;
+				break;
+			case SDL_MOUSEBUTTONUP:
+				if (ev.button.button == SDL_BUTTON_LEFT) {
+					_pi.leftMouseButton = false;
+				} else if (ev.button.button == SDL_BUTTON_RIGHT) {
+					_pi.rightMouseButton = false;
+				}
+				_pi.mouseX = ev.button.x;
+				_pi.mouseY = ev.button.y;
+				break;
+			case SDL_MOUSEMOTION:
+				_pi.mouseX = ev.motion.x;
+				_pi.mouseY = ev.motion.y;
 				break;
 			default:
 				break;
 			}
-			break;
-		case SDL_MOUSEBUTTONDOWN:
-			if (ev.button.button == SDL_BUTTON_LEFT) {
-				_pi.leftMouseButton = true;
-			} else if (ev.button.button == SDL_BUTTON_RIGHT) {
-				_pi.rightMouseButton = true;
-			}
-			_pi.mouseX = ev.button.x;
-			_pi.mouseY = ev.button.y;
-			break;
-		case SDL_MOUSEBUTTONUP:
-			if (ev.button.button == SDL_BUTTON_LEFT) {
-				_pi.leftMouseButton = false;
-			} else if (ev.button.button == SDL_BUTTON_RIGHT) {
-				_pi.rightMouseButton = false;
-			}
-			_pi.mouseX = ev.button.x;
-			_pi.mouseY = ev.button.y;
-			break;
-		case SDL_MOUSEMOTION:
-			_pi.mouseX = ev.motion.x;
-			_pi.mouseY = ev.motion.y;
-			break;
-		default:
+		}
+		if (paused) {
+			SDL_Delay(100);
+		} else {
 			break;
 		}
 	}
@@ -382,17 +395,11 @@ uint32 SystemStub_SDL::getTimeStamp() {
 }
 
 void SystemStub_SDL::lockAudio() {
-	if (!_audioLocked) {
-		SDL_LockAudio();
-		_audioLocked = true;
-	}
+	SDL_LockAudio();
 }
 
 void SystemStub_SDL::unlockAudio() {
-	if (_audioLocked) {
-		SDL_UnlockAudio();
-		_audioLocked = false;
-	}
+	SDL_UnlockAudio();
 }
 
 void SystemStub_SDL::startAudio(AudioCallback callback, void *param) {
@@ -443,3 +450,15 @@ void SystemStub_SDL::addDirtyRect(int x, int y, int w, int h) {
 	br->h = h;
 	++_blitRectsCount;
 }
+
+void SystemStub_SDL::setScreenDisplay(bool fullscreen) {
+	_screen = SDL_SetVideoMode(_screenW, _screenH, 32, fullscreen ? (SDL_HWSURFACE | SDL_FULLSCREEN) : SDL_HWSURFACE);
+	if (!_screen) {
+		error("SystemStub_SDL::init() Unable to allocate _screen buffer");
+	}
+	_fmt = _screen->format;
+	memset(_blitRects, 0, sizeof(_blitRects));
+	_blitRectsCount = 0;
+	_fullScreenRedraw = true;
+}
+

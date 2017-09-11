@@ -49,7 +49,7 @@ struct SceneObject {
 	int16 motionInit;
 	int16 motionNum1; // motionNumPrev
 	int16 motionNum2; // motionNum
-	int16 motionFrameNum; // ?
+	int16 motionFrameNum; // motionIdle ?
 	int16 mode;
 	int16 modeRndMul;
 	int16 statePrev;
@@ -72,8 +72,8 @@ struct SceneObjectMotion {
 
 struct Box {
 	int16 x1;
-	int16 y1;
 	int16 x2;
+	int16 y1;
 	int16 y2;
 	uint8 state;
 	int16 z;
@@ -260,7 +260,7 @@ struct Game {
 	// game.cpp
 	void restart();
 	void mainLoop();
-	bool isObjectInRect(int object);
+//	bool isObjectInRect(int object);
 	void updateKeyPressedTable();
 	void setupScreenPalette(const uint8 *src);
 	void clearSceneData(int anim);
@@ -305,6 +305,7 @@ struct Game {
 	bool cop_isMouseOverObject();
 	bool cop_testMousePrevObjectTransformXPos();
 	bool cop_testMousePrevObjectTransformYPos();
+	bool cop_setTestObjectFromClass();
 	bool cop_isObjectInScene();
 	bool cop_testObjectPrevState();
 	bool cop_testObjectState();
@@ -410,13 +411,13 @@ struct Game {
 
 	// saveload.cpp
 	void saveState(int slot);
-	void loadState(int slot);
+	void loadState(int slot, bool switchScene);
 
 	// win31.cpp (temporary helpers)
 	int win31_sndPlaySound(int op, void *data = 0);
 	void win31_stretchBits(SceneBitmap *bits, int srcHeight, int srcWidth, int srcY, int srcX, int dstHeight, int dstWidth, int dstY, int dstX);
 
-
+	bool _isDemo;
 	FileSystem _fs;
 	RandomGenerator _rnd;
 	SystemStub *_stub;
@@ -485,6 +486,7 @@ struct Game {
 	const char *_scriptDialogSprite1;
 	const char *_scriptDialogSprite2;
 	bool _switchScene;
+	bool _loadState;
 	bool _clearSceneData;
 	bool _gameOver;
 	int _loadDataState;

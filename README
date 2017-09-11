@@ -1,6 +1,6 @@
 
 Bermuda Syndrome/SDL README
-Release version: 0.1.0 (Jul 30 2007)
+Release version: 0.1.1 (Aug 6 2007)
 -------------------------------------------------------------------------------
 
 
@@ -25,13 +25,15 @@ Running:
 --------
 
 By default, the engine will try to load the game data files from the 'DATA'
-directory. The savestates are saved in the current directory.
+directory. The savestates are saved in the current directory. If you have the
+CD game soundtrack, you can rip the tracks to 22 Khz mono Vorbis .ogg files.
 
 These paths can be changed using command line switches :
 
 	Usage: bs [OPTIONS]...
-  	--datapath=PATH   Path to data files (default 'DATA')
-  	--savepath=PATH   Path to save files (default '.')
+  	--datapath=PATH    Path to data files (default 'DATA')
+  	--savepath=PATH    Path to save files (default '.')
+	--musicpath=MUSIC  Path to music files (default 'MUSIC')
 
 Game hotkeys :
 
@@ -39,6 +41,7 @@ Game hotkeys :
 	Tab             display bag
 	Ctrl            display status bar
 	Shift/Space     use weapon
+	Enter           skip dialogue speech
 
 Other hotkeys:
 
@@ -47,15 +50,17 @@ Other hotkeys:
 	+               increase game state slot
 	-               decrease game state slot
 	F               enable fast mode
+	W               toggle fullscreen/windowed display
 
 
 Todo:
 -----
 
-- Fix savestates not properly working with original interpreter
 - Add support for introduction and ending sequences (original game executable plays .avi files)
 - Speed up the screen rendering
-- Add fullscreen video mode and scalers
+- Add 320x240 downscaler
+- Add/uncomment required opcodes
+
 
 Contact:
 --------
@@ -68,4 +73,3 @@ URLs:
 
 [1] http://www.mobygames.com/game/bermuda-syndrome
 [2] http://www.reakktor.com/html/kk_games.html
-

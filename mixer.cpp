@@ -57,9 +57,11 @@ struct MixerChannel_Wav : MixerChannel {
 			int sampleRate = f->readUint32LE();
 			f->readUint32LE(); // averageBytesPerSec
 			f->readUint16LE(); // blockAlign
-			int bitsPerSample = f->readUint16LE();
-			if (compression != 1 || channels != 1 || (sampleRate != 11025 && sampleRate != 22050 && sampleRate != 44100) || bitsPerSample != 8) {
-				warning("Unhandled wav/pcm format c %d ch %d rate %d bits %d", compression, channels, sampleRate, bitsPerSample);
+			_bitsPerSample = f->readUint16LE();
+			if (compression != 1 || channels != 1 ||
+			    (sampleRate != 11025 && sampleRate != 22050 && sampleRate != 44100) ||
+			    (_bitsPerSample != 8 && _bitsPerSample != 16)) {
+				warning("Unhandled wav/pcm format c %d ch %d rate %d bits %d", compression, channels, sampleRate, _bitsPerSample);
 				return false;
 			}
 			_bufReadStep = (sampleRate << _fracStepBits) / mixerSampleRate;
@@ -78,13 +80,23 @@ struct MixerChannel_Wav : MixerChannel {
 
 	virtual int read(int16 *dst, int dstSize) {
 		for (int i = 0; i < dstSize; ++i) {
-			if ((_bufReadOffset >> _fracStepBits) >= _bufSize) {
-				// end of buffer
-				return i;
+			uint16 sample = 0;
+			switch (_bitsPerSample) {
+			case 8:
+				if ((_bufReadOffset >> _fracStepBits) >= _bufSize) { // end of buffer
+					return i;
+				}
+				sample = (_buf[_bufReadOffset >> _fracStepBits] << 8) ^ 0x8000;
+				break;
+			case 16:
+				if ((_bufReadOffset >> _fracStepBits) * 2 >= _bufSize) { // end of buffer
+					return i;
+				}
+				sample = READ_LE_UINT16(&_buf[(_bufReadOffset >> _fracStepBits) * 2]);
+				break;
 			}
-			const int16 sample = (int16)((_buf[_bufReadOffset >> _fracStepBits] << 8) ^ 0x8000);
-			clipMixerSample(dst[i], sample, _sfxVolume);
 			_bufReadOffset += _bufReadStep;
+			clipMixerSample(dst[i], (int16)sample, _sfxVolume);
 		}
 		return dstSize;
 	}
@@ -93,6 +105,7 @@ struct MixerChannel_Wav : MixerChannel {
 	int _bufSize;
 	int _bufReadOffset;
 	int _bufReadStep;
+	int _bitsPerSample;
 };
 
 #ifdef BERMUDA_VORBIS
@@ -182,7 +195,6 @@ struct MixerChannel_Vorbis : MixerChannel {
 				clipMixerSample(dst[readSize + i], sample, _musicVolume);
 			}
 			readSize += len / sizeof(int16);
-			// loop if necessary
 			dstSize -= len;
 		}
 		return readSize;

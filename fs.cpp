@@ -122,28 +122,32 @@ FileSystem::~FileSystem() {
 	delete _impl;
 }
 
-static void fixPath(const char *src, char *dst) {
-	if (strncmp(src, "..", 2) == 0) {
-		src += 3;
-	} else {
-		strcpy(dst, "SCN/");
-		dst += 4;
-	}
-	do {
-		if (*src == '\\') {
-			*dst = '/';
+static char *fixPath(const char *src) {
+	char *path = (char *)malloc(strlen(src) + 4 + 1);
+	if (path) {
+		char *dst = path;
+		if (strncmp(src, "..", 2) == 0) {
+			src += 3;
 		} else {
-			*dst = *src;
+			strcpy(dst, "SCN/");
+			dst += 4;
 		}
-		++dst;
-	} while (*src++);
+		do {
+			if (*src == '\\') {
+				*dst = '/';
+			} else {
+				*dst = *src;
+			}
+			++dst;
+		} while (*src++);
+	}
+	return path;
 }
 
 File *FileSystem::openFile(const char *path, bool errorIfNotFound) {
 	File *f = 0;
-	char *filePath = (char *)malloc(strlen(path) + 4 + 1);
+	char *filePath = fixPath(path);
 	if (filePath) {
-		fixPath(path, filePath);
 		const char *fileSystemPath = _impl->findFilePath(filePath);
 		if (fileSystemPath) {
 			f = new File;
@@ -165,4 +169,14 @@ void FileSystem::closeFile(File *f) {
 		f->close();
 		delete f;
 	}
+}
+
+bool FileSystem::existFile(const char *path) {
+	bool exists = false;
+	char *filePath = fixPath(path);
+	if (filePath) {
+		exists = _impl->findFilePath(filePath) != 0;
+		free(filePath);
+	}
+	return exists;
 }

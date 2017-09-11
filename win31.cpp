@@ -6,17 +6,16 @@
 
 int Game::win31_sndPlaySound(int op, void *data) {
 	debug(DBG_WIN31, "win31_sndPlaySound() %d", op);
-	File *fp;
 	switch (op) {
 	case 22:
 		if (!_mixer->isSoundPlaying(_mixerSoundId)) {
 			return 1;
 		}
 		break;
-	case 3:
-		fp = _fs.openFile((const char *)data);
-		_mixer->playSoundWav(fp, &_mixerSoundId);
-		_fs.closeFile(fp);
+	case 3: {
+			FileHolder fp(_fs, (const char *)data);
+			_mixer->playSoundWav(fp.operator->(), &_mixerSoundId);
+		}
 		break;
 	case 6:
 	case 7:

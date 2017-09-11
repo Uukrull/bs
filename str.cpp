@@ -67,7 +67,6 @@ char *stringNextToken(char **p) {
 			*p = 0;
 		}
 	}
-//printf("nextToken '%s'\n", token);
 	return token;
 }
 

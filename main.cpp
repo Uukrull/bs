@@ -49,4 +49,3 @@ int main(int argc, char *argv[]) {
 	delete stub;
 	return 0;
 }
-

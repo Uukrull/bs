@@ -121,8 +121,8 @@ static void saveOrLoad_sceneObject(SceneObject &so) {
 
 static void saveOrLoad_box(Box &b) {
 	saveOrLoadInt16(b.x1);
-	saveOrLoadInt16(b.y1);
 	saveOrLoadInt16(b.x2);
+	saveOrLoadInt16(b.y1);
 	saveOrLoadInt16(b.y2);
 	saveOrLoadByte(b.state);
 	saveOrLoadInt16(b.z);
@@ -234,7 +234,7 @@ void Game::saveState(int slot) {
 	debug(DBG_INFO, "Saved state to slot %d", slot);
 }
 
-void Game::loadState(int slot) {
+void Game::loadState(int slot, bool switchScene) {
 	File f;
 	char filePath[512];
 	sprintf(filePath, _saveFileNameFormat, _savePath, slot);
@@ -252,6 +252,10 @@ void Game::loadState(int slot) {
 		_varsTable[i] = loadInt16();
 	}
 	saveOrLoadStr(_tempTextBuffer);
+	if (switchScene) {
+		_switchScene = true;
+		return;
+	}
 	_sceneObjectsCount = loadInt16();
 	for (int i = 0; i < _sceneObjectsCount; ++i) {
 		saveOrLoad_sceneObject(_sceneObjectsTable[i]);
@@ -289,5 +293,4 @@ void Game::loadState(int slot) {
 	_musicTrack = loadInt32();
 	saveOrLoadStr(_musicName);
 	debug(DBG_INFO, "Loaded state from slot %d scene '%s'", slot, _tempTextBuffer);
-	_switchScene = true;
 }
