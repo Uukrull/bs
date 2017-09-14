@@ -8,8 +8,10 @@
 DEFINES = -DBERMUDA_POSIX -DBERMUDA_VORBIS
 VORBIS_LIBS = -lvorbisfile -lvorbis -logg
 
-SDL_CFLAGS = `sdl2-config --cflags`
-SDL_LIBS = `sdl2-config --libs` -lSDL2_mixer
+#SDL_CFLAGS = `sdl2-config --cflags`
+#SDL_LIBS = `sdl2-config --libs` -lSDL2_mixer
+SDL_CFLAGS = $(CFLAGS)
+SDL_LIBS = -lSDL2 -lSDL2_mixer
 
 CXXFLAGS = -g -O -Wall $(SDL_CFLAGS) $(DEFINES)
 
